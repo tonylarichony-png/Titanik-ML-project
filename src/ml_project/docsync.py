@@ -279,7 +279,10 @@ def build_eda_blocks(
     *,
     train_dataset: str,
 ) -> dict[str, str]:
-    snapshot = catalog.file_report()[
+    profile_names = set(profiles)
+    snapshot = catalog.file_report()
+    snapshot = snapshot[snapshot["dataset"].isin(profile_names)]
+    snapshot = snapshot[
         ["dataset", "rows", "columns", "memory_mib"]
     ].rename(
         columns={

@@ -52,7 +52,7 @@ tags:
 
 ## Стратегия разделения
 
-- **Тип:** random / stratified / group / time / nested / custom.
+- **Тип:** random / stratified / group / time / nested / custom. Точно strarified!
 - **Train:**
 - **Validation / CV:**
 - **Holdout test:**

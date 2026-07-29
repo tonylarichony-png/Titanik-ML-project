@@ -1,4 +1,4 @@
-"""File discovery, loading, inventory, and schema cataloguing."""
+"""File discovery, loading, inventory, and schema cataloguing.Only for 01_data"""
 
 from __future__ import annotations
 

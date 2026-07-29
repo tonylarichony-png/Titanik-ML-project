@@ -3,9 +3,97 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Mapping, Sequence
 
 import numpy as np
 import pandas as pd
+
+
+FEATURE_GROUP_NAMES = (
+    "numeric",
+    "count",
+    "categorical",
+    "ordinal",
+    "text",
+    "datetime",
+    "identifier",
+    "ignored",
+)
+
+
+def validate_feature_groups(
+    frame: pd.DataFrame,
+    feature_groups: Mapping[str, Sequence[str]],
+    *,
+    target: str | None = None,
+) -> dict[str, list[str]]:
+    """Validate and normalize the explicit feature schema from config.py."""
+    unknown_groups = sorted(set(feature_groups) - set(FEATURE_GROUP_NAMES))
+    normalized = {
+        group: list(dict.fromkeys(feature_groups.get(group, ())))
+        for group in FEATURE_GROUP_NAMES
+    }
+
+    assignments: dict[str, list[str]] = {}
+    for group, columns in normalized.items():
+        for column in columns:
+            assignments.setdefault(column, []).append(group)
+
+    duplicate_assignments = {
+        column: groups
+        for column, groups in assignments.items()
+        if len(groups) > 1
+    }
+    missing_columns = sorted(set(assignments) - set(frame.columns))
+    expected_columns = set(frame.columns)
+    if target is not None:
+        expected_columns.discard(target)
+    unassigned_columns = sorted(expected_columns - set(assignments))
+
+    non_numeric = [
+        column
+        for group in ("numeric", "count")
+        for column in normalized[group]
+        if column in frame.columns
+        and not pd.api.types.is_numeric_dtype(frame[column])
+    ]
+
+    errors: list[str] = []
+    if unknown_groups:
+        errors.append(f"неизвестные группы: {', '.join(unknown_groups)}")
+    if duplicate_assignments:
+        formatted = ", ".join(
+            f"{column} ({'/'.join(groups)})"
+            for column, groups in sorted(duplicate_assignments.items())
+        )
+        errors.append(f"признаки назначены несколько раз: {formatted}")
+    if missing_columns:
+        errors.append(
+            "указанные признаки отсутствуют в train: "
+            + ", ".join(missing_columns)
+        )
+    if target is not None and target in assignments:
+        errors.append(
+            f"target {target!r} не должен входить в FEATURE_GROUPS"
+        )
+    if unassigned_columns:
+        errors.append(
+            "не распределены по группам: " + ", ".join(unassigned_columns)
+        )
+    if non_numeric:
+        errors.append(
+            "в numeric/count указаны нечисловые столбцы: "
+            + ", ".join(sorted(set(non_numeric)))
+        )
+
+    if errors:
+        details = "\n".join(f"- {error}" for error in errors)
+        raise ValueError(
+            "Некорректный FEATURE_GROUPS в src/ml_project/config.py:\n"
+            f"{details}"
+        )
+
+    return normalized
 
 
 @dataclass
@@ -84,23 +172,57 @@ class DatasetProfiler:
         report.index.name = self.target
         return report.reset_index()
 
-    def numeric_report(self) -> pd.DataFrame:
+    def numeric_report(
+        self,
+        *,
+        columns: Sequence[str] | None = None,
+    ) -> pd.DataFrame:
         """Return descriptive statistics for numeric columns."""
-        columns = self.df.select_dtypes(include="number").columns.tolist()
-        if not columns:
-            return pd.DataFrame()
-        return self.df[columns].describe().T.reset_index(names="field")
-
-    def categorical_report(self, *, max_unique: int = 30) -> pd.DataFrame:
-        """Return compact cardinality and mode information."""
-        columns = [
+        selected = (
+            list(dict.fromkeys(columns))
+            if columns is not None
+            else self.df.select_dtypes(include="number").columns.tolist()
+        )
+        missing = [column for column in selected if column not in self.df.columns]
+        if missing:
+            raise KeyError(f"Numeric columns are absent: {missing}")
+        non_numeric = [
             column
-            for column in self.df.columns
-            if self.df[column].nunique(dropna=True) <= max_unique
-            and column != self.target
+            for column in selected
+            if not pd.api.types.is_numeric_dtype(self.df[column])
         ]
+        if non_numeric:
+            raise TypeError(f"Configured numeric columns are not numeric: {non_numeric}")
+        if not selected:
+            return pd.DataFrame()
+        return self.df[selected].describe().T.reset_index(names="field")
+
+    def categorical_report(
+        self,
+        *,
+        columns: Sequence[str] | None = None,
+        max_unique: int = 30,
+    ) -> pd.DataFrame:
+        """Return compact cardinality and mode information."""
+        if columns is None:
+            selected = [
+                column
+                for column in self.df.columns
+                if self.df[column].nunique(dropna=True) <= max_unique
+                and column != self.target
+            ]
+        else:
+            selected = list(dict.fromkeys(columns))
+            missing = [
+                column
+                for column in selected
+                if column not in self.df.columns
+            ]
+            if missing:
+                raise KeyError(f"Categorical columns are absent: {missing}")
+
         rows: list[dict[str, object]] = []
-        for column in columns:
+        for column in selected:
             mode = self.df[column].mode(dropna=True)
             counts = self.df[column].value_counts(dropna=True)
             rows.append(
@@ -126,19 +248,44 @@ class DatasetProfiler:
         )
         return axis
 
-    def plot_numeric_histograms(self, *, bins: int = 25):
+    def plot_numeric_histograms(
+        self,
+        *,
+        columns: Sequence[str] | None = None,
+        bins: int = 25,
+    ):
         """Plot numeric features, excluding configured key and target."""
         import matplotlib.pyplot as plt
 
-        excluded = {value for value in (self.key, self.target) if value}
-        columns = [
-            column
-            for column in self.df.select_dtypes(include="number").columns
-            if column not in excluded
-        ]
-        if not columns:
+        if columns is None:
+            excluded = {value for value in (self.key, self.target) if value}
+            selected = [
+                column
+                for column in self.df.select_dtypes(include="number").columns
+                if column not in excluded
+            ]
+        else:
+            selected = list(dict.fromkeys(columns))
+            missing = [
+                column
+                for column in selected
+                if column not in self.df.columns
+            ]
+            if missing:
+                raise KeyError(f"Numeric columns are absent: {missing}")
+            non_numeric = [
+                column
+                for column in selected
+                if not pd.api.types.is_numeric_dtype(self.df[column])
+            ]
+            if non_numeric:
+                raise TypeError(
+                    f"Configured numeric columns are not numeric: {non_numeric}"
+                )
+
+        if not selected:
             return None
-        axes = self.df[columns].hist(figsize=(12, 8), bins=bins)
+        axes = self.df[selected].hist(figsize=(12, 8), bins=bins)
         plt.suptitle(f"Numeric distributions — {self.name}", y=1.02)
         plt.tight_layout()
         return axes

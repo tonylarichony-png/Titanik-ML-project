@@ -50,6 +50,7 @@ Project Dashboard ([[README.md]])
 | Паспорт файлов и схемы | [[notebooks/01_data.ipynb]] |
 | Источники, схема и версии raw-данных | [[docs/01_data.md]] |
 | Первичный профиль и EDA | [[notebooks/02_eda.ipynb]] |
+| Проверка EDA-гипотез и связей с target | [[notebooks/02_eda_hypotheses.ipynb]] |
 | Выводы EDA и рекомендации по обработке | [[docs/02_eda.md]] |
 | Метрика и протокол проверки | [[docs/03_validation.md]] |
 | Model-ready выборка, preprocessing и признаки | [[docs/04_features.md]] |
@@ -71,6 +72,9 @@ Project Dashboard ([[README.md]])
 - [[notebooks/01_data.ipynb]] обновляет автоматические блоки в [[docs/01_data.md]].
 - Перед синхронизацией `01_data` печатает готовую заготовку `FIELD_DESCRIPTIONS` для `src/ml_project/config.py`: найденные столбцы добавляются автоматически, но файл конфигурации не перезаписывается.
 - [[notebooks/02_eda.ipynb]] обновляет фактический профиль в [[docs/02_eda.md]].
+- Ноутбук `02_eda_hypotheses` не изменяет документацию автоматически: переносите проверенные выводы в [[docs/02_eda.md]], а идеи для будущих экспериментов — в [[hypotheses/_index.md]].
+- Перед EDA распределите каждый столбец train, кроме target, ровно в одну группу `FEATURE_GROUPS`: `numeric`, `count`, `categorical`, `ordinal`, `text`, `datetime`, `identifier` или `ignored`. Числовой отчёт использует `numeric + count`, категориальный — `categorical + ordinal`.
+- После редактирования `src/ml_project/config.py` финальная ячейка `01_data` сама перечитывает конфиг через `importlib.reload`, пересоздаёт каталог и обновляет Markdown — перезапуск kernel не требуется.
 - Запись выполняется только явной финальной ячейкой notebook.
 - Код изменяет только содержимое между маркерами `<!-- auto:...:start -->` и `<!-- auto:...:end -->`.
 - Ручные выводы храните вне автоматических блоков: при повторном запуске они не перезаписываются.

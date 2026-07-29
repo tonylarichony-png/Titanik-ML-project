@@ -10,7 +10,9 @@ from ml_project import (
     DataCatalog,
     DatasetProfiler,
     MarkdownDocument,
+    build_eda_blocks,
     build_field_descriptions_template,
+    validate_feature_groups,
 )
 from ml_project.docsync import dataframe_to_markdown
 
@@ -46,6 +48,36 @@ class DatasetProfilerTests(unittest.TestCase):
         self.assertEqual(int(duplicate["key_duplicates"]), 1)
         self.assertEqual(target["count"].tolist(), [1, 2])
 
+    def test_explicit_groups_control_numeric_and_categorical_reports(self) -> None:
+        groups = validate_feature_groups(
+            self.frame,
+            {
+                "identifier": ["id"],
+                "categorical": [],
+                "numeric": ["value"],
+            },
+            target="target",
+        )
+
+        numeric = self.profile.numeric_report(columns=groups["numeric"])
+        categorical = self.profile.categorical_report(
+            columns=groups["categorical"]
+        )
+
+        self.assertEqual(numeric["field"].tolist(), ["value"])
+        self.assertTrue(categorical.empty)
+
+    def test_feature_groups_reject_duplicate_and_unassigned_columns(self) -> None:
+        with self.assertRaisesRegex(ValueError, "назначены несколько раз"):
+            validate_feature_groups(
+                self.frame,
+                {
+                    "identifier": ["id"],
+                    "numeric": ["value", "id"],
+                },
+                target="target",
+            )
+
 
 class DataCatalogTests(unittest.TestCase):
     def test_file_report_and_hash(self) -> None:
@@ -78,6 +110,54 @@ class DataCatalogTests(unittest.TestCase):
             )
             self.assertEqual(template.count("'id':"), 1)
             self.assertIn("'id': 'Идентификатор строки.'", template)
+
+
+class EdaBlockTests(unittest.TestCase):
+    def test_service_dataset_is_excluded_from_generated_eda_blocks(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw = root / "data" / "raw"
+            raw.mkdir(parents=True)
+
+            pd.DataFrame(
+                {"id": [1, 2], "target": [0, 1], "value": [10.0, None]}
+            ).to_csv(raw / "train.csv", index=False)
+            pd.DataFrame(
+                {"id": [3], "value": [20.0]}
+            ).to_csv(raw / "test.csv", index=False)
+            pd.DataFrame(
+                {"id": [3], "target": [0]}
+            ).to_csv(raw / "submission.csv", index=False)
+
+            specs = {
+                "train": {"filename": "train.csv", "role": "train"},
+                "test": {"filename": "test.csv", "role": "inference"},
+                "submission": {
+                    "filename": "submission.csv",
+                    "role": "submission_example",
+                },
+            }
+            catalog = DataCatalog(root, Path("data/raw"), specs)
+            datasets = catalog.load_all()
+            profiles = {
+                "train": DatasetProfiler(
+                    datasets["train"], name="train", key="id", target="target"
+                ),
+                "test": DatasetProfiler(
+                    datasets["test"], name="test", key="id"
+                ),
+            }
+
+            blocks = build_eda_blocks(
+                catalog,
+                profiles,
+                train_dataset="train",
+            )
+
+            self.assertIn("train", blocks["eda-snapshot"])
+            self.assertIn("test", blocks["eda-snapshot"])
+            self.assertNotIn("submission", blocks["eda-snapshot"])
+            self.assertNotIn("submission", blocks["eda-quality"])
 
 
 class MarkdownDocumentTests(unittest.TestCase):
