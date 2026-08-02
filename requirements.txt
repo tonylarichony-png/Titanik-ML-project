@@ -1,0 +1,11 @@
+# Core notebooks
+numpy
+pandas
+matplotlib
+seaborn
+jupyterlab
+
+# Baseline modeling
+scikit-learn
+joblib
+

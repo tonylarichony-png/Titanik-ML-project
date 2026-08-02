@@ -27,14 +27,24 @@ tags:
 
 ## Текущий baseline
 
-| Поле | Значение |
-|---|---|
-| Эксперимент / версия |  |
-| Данные |  |
-| Модель |  |
-| Основная метрика |  |
-| Значение |  |
-| Стоимость / latency |  |
+<!-- auto:current-baseline:start -->
+
+| Поле                 | Значение                                                      |
+| -------------------- | ------------------------------------------------------------- |
+| Эксперимент / версия | Baseline / logistic_regression                                |
+| Карточка             | [[experiments/EXP-001 Baseline.md\|подробный baseline-отчёт]] |
+| Данные               | 7d118fef8b6c…                                                 |
+| Модель               | logistic regression                                           |
+| Validation           | stratified_kfold(n_splits=5, shuffle=True, seed=42)           |
+| Основная метрика     | accuracy                                                      |
+| Значение             | 0.7969 ± 0.0163                                               |
+| Стоимость / latency  | см. cv_summary.csv                                            |
+
+<!-- auto:current-baseline:end -->
+
+Блок может быть синхронизирован из [[notebooks/03_baseline.ipynb]] после
+проверки результата. Полный контекст запуска всё равно фиксируется отдельной
+заметкой в [[experiments/_index.md]].
 
 ## Текущий лучший результат
 

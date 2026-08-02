@@ -27,3 +27,7 @@ data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+
+# Локальные модели и полные результаты запусков
+artifacts/*
+!artifacts/_index.md

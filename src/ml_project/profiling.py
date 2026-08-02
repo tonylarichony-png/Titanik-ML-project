@@ -96,6 +96,101 @@ def validate_feature_groups(
     return normalized
 
 
+def grouped_target_report(
+    frame: pd.DataFrame,
+    *,
+    feature: str,
+    target: str,
+    ci_level: float = 95,
+    n_boot: int = 1000,
+    seed: int = 42,
+) -> pd.DataFrame:
+    """Estimate grouped target means and nonparametric bootstrap intervals.
+
+    For a binary ``0/1`` target, the estimate is named ``target_rate``.
+    Other numeric targets use ``target_mean``. The returned CI describes
+    uncertainty of the group mean, not the spread of individual observations.
+    """
+    missing = [
+        column for column in (feature, target) if column not in frame.columns
+    ]
+    if missing:
+        raise KeyError(f"Columns are absent: {missing}")
+    if not pd.api.types.is_numeric_dtype(frame[target]):
+        raise TypeError("grouped_target_report requires a numeric target.")
+    if not 0 < ci_level < 100:
+        raise ValueError("ci_level must be between 0 and 100.")
+    if n_boot < 1:
+        raise ValueError("n_boot must be positive.")
+
+    unique_target = (
+        pd.to_numeric(frame[target], errors="coerce")
+        .dropna()
+        .unique()
+        .astype(float)
+    )
+    is_binary = (
+        len(unique_target) > 0
+        and len(unique_target) <= 2
+        and bool(np.isin(unique_target, [0.0, 1.0]).all())
+    )
+    estimate_column = "target_rate" if is_binary else "target_mean"
+    lower_percentile = (100 - ci_level) / 2
+    upper_percentile = 100 - lower_percentile
+
+    rows: list[dict[str, object]] = []
+    grouped = frame.groupby(
+        feature,
+        dropna=False,
+        sort=False,
+        observed=True,
+    )
+    for group_number, (group_value, group_frame) in enumerate(grouped):
+        values = (
+            pd.to_numeric(group_frame[target], errors="coerce")
+            .dropna()
+            .to_numpy(dtype=float)
+        )
+        if values.size == 0:
+            estimate = np.nan
+            ci_low = np.nan
+            ci_high = np.nan
+        elif values.size == 1:
+            estimate = float(values[0])
+            ci_low = estimate
+            ci_high = estimate
+        else:
+            estimate = float(values.mean())
+            rng = np.random.default_rng(seed + group_number)
+            bootstrap_means = np.empty(n_boot, dtype=float)
+            # Limit each temporary index matrix to roughly one million values.
+            batch_size = max(1, min(n_boot, 1_000_000 // values.size))
+            for start in range(0, n_boot, batch_size):
+                stop = min(start + batch_size, n_boot)
+                indices = rng.integers(
+                    0,
+                    values.size,
+                    size=(stop - start, values.size),
+                )
+                bootstrap_means[start:stop] = values[indices].mean(axis=1)
+            ci_low, ci_high = np.percentile(
+                bootstrap_means,
+                [lower_percentile, upper_percentile],
+            )
+
+        rows.append(
+            {
+                feature: "<NA>" if pd.isna(group_value) else group_value,
+                "rows": len(group_frame),
+                estimate_column: estimate,
+                "ci_low": float(ci_low),
+                "ci_high": float(ci_high),
+            }
+        )
+
+    return pd.DataFrame(rows).set_index(feature)
+
+
 @dataclass
 class DatasetProfiler:
     """Profile one dataframe without embedding implementation in a notebook."""

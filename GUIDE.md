@@ -43,7 +43,7 @@ Project Dashboard ([[README.md]])
 |---|---|
 | Текущее состояние и следующий шаг | [[README.md]] |
 | Видимость необязательных разделов | [[PROJECT_CONFIG.md]] |
-| Формулировка задачи | [[docs/00_problem.md]] |
+| Формулировка задачи, основная метрика и критерий успеха | [[docs/00_problem.md]] |
 | Исходные файлы данных | `data/raw/` |
 | Общая конфигурация данных | `src/ml_project/config.py` |
 | Переиспользуемый Python-код | `src/ml_project/` |
@@ -52,8 +52,10 @@ Project Dashboard ([[README.md]])
 | Первичный профиль и EDA | [[notebooks/02_eda.ipynb]] |
 | Проверка EDA-гипотез и связей с target | [[notebooks/02_eda_hypotheses.ipynb]] |
 | Выводы EDA и рекомендации по обработке | [[docs/02_eda.md]] |
-| Метрика и протокол проверки | [[docs/03_validation.md]] |
+| Реализация метрики, split и протокол проверки | [[docs/03_validation.md]] |
 | Model-ready выборка, preprocessing и признаки | [[docs/04_features.md]] |
+| Параметры первого baseline | `src/ml_project/baseline_config.py` |
+| Расчёт первого baseline | [[notebooks/03_baseline.ipynb]] |
 | Сводка результатов | [[docs/05_experiments.md]] |
 | Системные ошибки модели | [[docs/06_error_analysis.md]] |
 | Inference, мониторинг и retraining | [[docs/07_production.md]] |
@@ -61,6 +63,7 @@ Project Dashboard ([[README.md]])
 | Один воспроизводимый запуск | отдельная заметка в [[experiments/_index.md|experiments]] |
 | Важный выбор и его обоснование | отдельная заметка в [[decisions/_index.md|decisions]] |
 | Блокер, риск или дефект | отдельная заметка в [[issues/_index.md|issues]] |
+| Локальные модели, CV-таблицы и metadata | [[artifacts/_index.md]] |
 
 Не дублируйте подробности: в dashboard и сводках оставляйте короткий итог и ссылку на источник.
 
@@ -72,7 +75,8 @@ Project Dashboard ([[README.md]])
 - [[notebooks/01_data.ipynb]] обновляет автоматические блоки в [[docs/01_data.md]].
 - Перед синхронизацией `01_data` печатает готовую заготовку `FIELD_DESCRIPTIONS` для `src/ml_project/config.py`: найденные столбцы добавляются автоматически, но файл конфигурации не перезаписывается.
 - [[notebooks/02_eda.ipynb]] обновляет фактический профиль в [[docs/02_eda.md]].
-- Ноутбук `02_eda_hypotheses` не изменяет документацию автоматически: переносите проверенные выводы в [[docs/02_eda.md]], а идеи для будущих экспериментов — в [[hypotheses/_index.md]].
+- В `02_eda_hypotheses` сохранение выполняется только при явном `SAVE_FINDING = True`: карточка может содержать график, одну или несколько Markdown-таблиц либо оба типа артефактов. Большие таблицы полностью сохраняются как CSV в `assets/eda/`, а ссылка на карточку автоматически появляется в [[docs/02_eda.md#Сохранённые EDA-наблюдения]]. Идеи для модельной проверки переносите в [[hypotheses/_index.md]].
+- [[notebooks/03_baseline.ipynb]] читает metric из [[docs/00_problem.md]], data contract из `config.py`, а CV/model-параметры из `baseline_config.py`. При `SYNC_DOCS = True` он обновляет только baseline-блоки в [[docs/03_validation.md]] и [[docs/05_experiments.md]]. CSV, metadata и final model сохраняются только отдельными явными флагами.
 - Перед EDA распределите каждый столбец train, кроме target, ровно в одну группу `FEATURE_GROUPS`: `numeric`, `count`, `categorical`, `ordinal`, `text`, `datetime`, `identifier` или `ignored`. Числовой отчёт использует `numeric + count`, категориальный — `categorical + ordinal`.
 - После редактирования `src/ml_project/config.py` финальная ячейка `01_data` сама перечитывает конфиг через `importlib.reload`, пересоздаёт каталог и обновляет Markdown — перезапуск kernel не требуется.
 - Запись выполняется только явной финальной ячейкой notebook.
@@ -96,7 +100,7 @@ Project Dashboard ([[README.md]])
 Подходит для pet-проекта или быстрого прототипа:
 
 1. Заполнить Problem, Data и Validation.
-2. Зафиксировать baseline.
+2. Настроить `baseline_config.py`, запустить [[notebooks/03_baseline.ipynb]] и зафиксировать baseline.
 3. Создавать заметку только для значимых экспериментов.
 4. Обновлять README и таблицу лучших результатов.
 5. Перед завершением выполнить Error analysis.
@@ -188,6 +192,16 @@ issues/ISSUE-001 Короткое название.md
 - переименование безопасно делать средствами Obsidian, чтобы обновились Wiki-ссылки.
 
 ## 8. Рабочие сценарии
+
+### Первый baseline
+
+1. Завершить EDA-рекомендации и зафиксировать [[docs/03_validation.md|validation-протокол]].
+2. В `src/ml_project/config.py` заполнить target, key и `FEATURE_GROUPS`.
+3. В `src/ml_project/baseline_config.py` выбрать тип задачи, CV и preprocessing.
+4. Запустить [[notebooks/03_baseline.ipynb]] сверху вниз и сравнить `dummy` с простой моделью.
+5. После проверки результата включить нужные write-флаги, создать карточку `EXP-xxx Baseline` и обновить [[README.md]].
+
+Не заполняйте пропуски и не кодируйте категории заранее на полном train: эти операции должны находиться внутри model pipeline и обучаться отдельно в каждом fold.
 
 ### Новая гипотеза
 
@@ -282,6 +296,7 @@ issues/ISSUE-001 Короткое название.md
 - [ ] Определены target, объект и момент предсказания.
 - [ ] Зафиксирована версия исходных данных.
 - [ ] Выбрана стратегия split и holdout.
+- [ ] Заполнен `src/ml_project/baseline_config.py`.
 - [ ] Посчитан простой baseline.
 - [ ] Создана первая гипотеза.
 - [ ] Создан первый воспроизводимый эксперимент.

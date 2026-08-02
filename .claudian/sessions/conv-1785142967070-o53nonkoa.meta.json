@@ -4,8 +4,8 @@
   "title": "Создай в Obsidian такую структуру:",
   "titleGenerationStatus": "failed",
   "createdAt": 1785142967070,
-  "updatedAt": 1785322327583,
-  "lastResponseAt": 1785322327583,
+  "updatedAt": 1785664138065,
+  "lastResponseAt": 1785664138065,
   "sessionId": "019fa2cf-fba7-7883-801d-0db27a8da478",
   "selectedModel": "gpt-5.6-sol",
   "providerState": {
@@ -16,13 +16,13 @@
   },
   "currentNote": "README.md",
   "usage": {
-    "inputTokens": 48467,
+    "inputTokens": 89745,
     "cacheCreationInputTokens": 0,
-    "cacheReadInputTokens": 47872,
+    "cacheReadInputTokens": 88832,
     "contextWindow": 258400,
     "contextWindowIsAuthoritative": true,
-    "contextTokens": 48467,
-    "percentage": 19,
+    "contextTokens": 89745,
+    "percentage": 35,
     "model": "gpt-5.6-sol"
   }
 }

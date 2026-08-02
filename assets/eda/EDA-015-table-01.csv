@@ -1,0 +1,34 @@
+index,PassengerId,Cabin,Name,Pclass
+21,22,D56,"Beesley, Mr. Lawrence",2
+52,53,D33,"Harper, Mrs. Henry Sleeper (Myna Haxtun)",1
+97,98,D10 D12,"Greenfield, Mr. William Bertram",1
+102,103,D26,"White, Mr. Richard Frasar",1
+124,125,D26,"White, Mr. Percival Wayland",1
+136,137,D47,"Newsom, Miss. Helen Monypeny",1
+215,216,D36,"Newell, Miss. Madeleine",1
+218,219,D15,"Bazzani, Miss. Albina",1
+248,249,D35,"Beckwith, Mr. Richard Leonard",1
+275,276,D7,"Andrews, Miss. Kornelia Theodosia",1
+292,293,D,"Levy, Mr. Rene Jacques",2
+327,328,D,"Ball, Mrs. (Ada E Hall)",2
+366,367,D37,"Warren, Mrs. Frank Manley (Anna Sophia Atkinson)",1
+393,394,D36,"Newell, Miss. Marjorie",1
+457,458,D21,"Kenyon, Mrs. Frederick R (Marion)",1
+473,474,D,"Jerwan, Mrs. Amin S (Marie Marthe Thuillard)",2
+496,497,D20,"Eustis, Miss. Elizabeth Mussey",1
+515,516,D46,"Walker, Mr. William Anderson",1
+591,592,D20,"Stephenson, Mrs. Walter Bertram (Martha Eustis)",1
+621,622,D19,"Kimball, Mr. Edwin Nelson Jr",1
+625,626,D50,"Sutton, Mr. Frederick",1
+627,628,D9,"Longley, Miss. Gretchen Fiske",1
+645,646,D33,"Harper, Mr. Henry Sleeper",1
+659,660,D48,"Newell, Mr. Arthur Webster",1
+681,682,D49,"Hassab, Mr. Hammad",1
+740,741,D45,"Hawksford, Mr. Walter James",1
+748,749,D30,"Marvin, Mr. Daniel Warner",1
+765,766,D11,"Hogeboom, Mrs. John C (Anna Andrews)",1
+782,783,D6,"Long, Mr. Milton Clyde",1
+796,797,D17,"Leader, Dr. Alice (Farnham)",1
+853,854,D28,"Lines, Miss. Mary Conover",1
+862,863,D17,"Swift, Mrs. Frederick Joel (Margaret Welles Barron)",1
+871,872,D35,"Beckwith, Mrs. Richard Leonard (Sallie Monypeny)",1

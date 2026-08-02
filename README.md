@@ -3,7 +3,6 @@ type: ml-project
 status: idea
 stage: problem
 owner:
-primary_metric:
 best_result:
 last_reviewed:
 tags:
@@ -24,7 +23,8 @@ tags:
 5. Настройте и запустите [[notebooks/02_eda.ipynb|ноутбук EDA]], заполните [[docs/02_eda.md]] и превратите наблюдения в проверяемые рекомендации.
 6. Зафиксируйте честную проверку качества в [[docs/03_validation.md]] **до сравнения моделей**.
 7. Опишите model-ready выборку и preprocessing в [[docs/04_features.md]].
-8. Создавайте гипотезы и эксперименты через встроенную команду Obsidian **Templates: Insert template**.
+8. Настройте `src/ml_project/baseline_config.py` и запустите [[notebooks/03_baseline.ipynb|первый воспроизводимый baseline]].
+9. Создавайте гипотезы и эксперименты через встроенную команду Obsidian **Templates: Insert template**.
 
 Полная инструкция: [[GUIDE.md|Как пользоваться шаблоном]].
 
@@ -38,7 +38,7 @@ tags:
 | Владелец |  |
 | Статус | `idea` |
 | Текущий этап | `problem` |
-| Основная метрика |  |
+| Основная метрика | `= [[docs/00_problem]].primary_metric` |
 | Baseline |  |
 | Лучший результат |  |
 | Репозиторий / код |  |
@@ -76,6 +76,7 @@ tags:
 - [[decisions/_index.md|Решения]]
 - [[issues/_index.md|Проблемы и блокеры]]
 - [[assets/_index.md|Артефакты и графики]]
+- [[artifacts/_index.md|Локальные модели и результаты запусков]]
 
 ## Ключевые результаты
 

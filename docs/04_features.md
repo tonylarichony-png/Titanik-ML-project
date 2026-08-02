@@ -51,6 +51,11 @@ DATA snapshot → фильтры / join → split по [[docs/03_validation.md]]
 
 ## Preprocessing
 
+Первый исполняемый вариант задаётся в `src/ml_project/baseline_config.py` и
+строится [[notebooks/03_baseline.ipynb|baseline notebook]] как единый sklearn
+Pipeline. Здесь хранится не копия Python-конфига, а **причины решений**,
+ограничения и статус признаков.
+
 ### Числовые
 
 - Imputation:
