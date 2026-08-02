@@ -56,6 +56,8 @@ Project Dashboard ([[README.md]])
 | Model-ready выборка, preprocessing и признаки | [[docs/04_features.md]] |
 | Параметры первого baseline | `src/ml_project/baseline_config.py` |
 | Расчёт первого baseline | [[notebooks/03_baseline.ipynb]] |
+| Контракт одного эксперимента | `src/ml_project/experiment_config.py` |
+| Контролируемое сравнение, графики и фиксация | [[notebooks/04_experiment.ipynb]] |
 | Сводка результатов | [[docs/05_experiments.md]] |
 | Системные ошибки модели | [[docs/06_error_analysis.md]] |
 | Inference, мониторинг и retraining | [[docs/07_production.md]] |
@@ -77,6 +79,7 @@ Project Dashboard ([[README.md]])
 - [[notebooks/02_eda.ipynb]] обновляет фактический профиль в [[docs/02_eda.md]].
 - В `02_eda_hypotheses` сохранение выполняется только при явном `SAVE_FINDING = True`: карточка может содержать график, одну или несколько Markdown-таблиц либо оба типа артефактов. Большие таблицы полностью сохраняются как CSV в `assets/eda/`, а ссылка на карточку автоматически появляется в [[docs/02_eda.md#Сохранённые EDA-наблюдения]]. Идеи для модельной проверки переносите в [[hypotheses/_index.md]].
 - [[notebooks/03_baseline.ipynb]] читает metric из [[docs/00_problem.md]], data contract из `config.py`, а CV/model-параметры из `baseline_config.py`. При `SYNC_DOCS = True` он обновляет только baseline-блоки в [[docs/03_validation.md]] и [[docs/05_experiments.md]]. CSV, metadata и final model сохраняются только отдельными явными флагами.
+- [[notebooks/04_experiment.ipynb]] автоматически пересчитывает baseline reference и пользовательские кандидаты на одинаковых folds. Пользователь заполняет pre-registration и две экспериментальные зоны; графики всех метрик, fold-таблицы, карточка `EXP-xxx`, `experiments/results.csv` и leaderboard формируются автоматически.
 - Перед EDA распределите каждый столбец train, кроме target, ровно в одну группу `FEATURE_GROUPS`: `numeric`, `count`, `categorical`, `ordinal`, `text`, `datetime`, `identifier` или `ignored`. Числовой отчёт использует `numeric + count`, категориальный — `categorical + ordinal`.
 - После редактирования `src/ml_project/config.py` финальная ячейка `01_data` сама перечитывает конфиг через `importlib.reload`, пересоздаёт каталог и обновляет Markdown — перезапуск kernel не требуется.
 - Запись выполняется только явной финальной ячейкой notebook.

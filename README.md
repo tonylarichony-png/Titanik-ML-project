@@ -24,7 +24,8 @@ tags:
 6. Зафиксируйте честную проверку качества в [[docs/03_validation.md]] **до сравнения моделей**.
 7. Опишите model-ready выборку и preprocessing в [[docs/04_features.md]].
 8. Настройте `src/ml_project/baseline_config.py` и запустите [[notebooks/03_baseline.ipynb|первый воспроизводимый baseline]].
-9. Создавайте гипотезы и эксперименты через встроенную команду Obsidian **Templates: Insert template**.
+9. Для каждой контролируемой проверки настройте `src/ml_project/experiment_config.py` и используйте [[notebooks/04_experiment.ipynb|автоматизированный notebook эксперимента]].
+10. Для нестандартных исследований и решений используйте встроенную команду Obsidian **Templates: Insert template**.
 
 Полная инструкция: [[GUIDE.md|Как пользоваться шаблоном]].
 
