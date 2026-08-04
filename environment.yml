@@ -1,0 +1,13 @@
+name: titanik-ml
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - numpy
+  - pandas
+  - matplotlib
+  - seaborn
+  - jupyterlab
+  - ipykernel
+  - scikit-learn
+  - joblib
