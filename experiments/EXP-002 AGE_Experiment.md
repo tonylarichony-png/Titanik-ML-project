@@ -6,7 +6,7 @@ status: completed
 created: 2026-08-02
 hypothesis: "Если заполнить Age медианой по Title и Pclass внутри каждого train-fold, то accuracy повысится, потому что эти признаки несут информацию о возрасте."
 primary_metric: "accuracy"
-decision: pending
+decision: adopt
 ---
 
 # EXP-002 — Заполнение пропусков Age с помощью "title" and "Pclass"
@@ -27,15 +27,16 @@ decision: pending
 | Одно изменение      | Новый fold-safe способ заполнения пропусков Age                                                                                                      |
 | Критерий успеха     | Legacy pre-registration: accuracy должна вырасти; минимальный эффект и guardrails до первого запуска не были зафиксированы.                          |
 | Формальные критерии | passed                                                                                                                                               |
-| Решение             | pending                                                                                                                                              |
+| Решение             | adopt                                                                                                                                                |
 | Run                 | exp_002_v1                                                                                                                                           |
 | Версия данных       | 7d118fef8b6c…                                                                                                                                        |
 | Validation          | stratified_kfold(n_splits=5, shuffle=True, seed=42)                                                                                                  |
 | Reference           | baseline_reference                                                                                                                                   |
 | Основной кандидат   | candidate                                                                                                                                            |
 | Основная метрика    | accuracy                                                                                                                                             |
+| Цепочка             | EXP-001 → EXP-002                                                                                                                                    |
 | Код эксперимента    | [[src/ml_project/experiments/exp_002_age_imputation.py\|ml_project.experiments.exp_002_age_imputation]]                                              |
-| Hash кода           | 347270751bbf…                                                                                                                                        |
+| Hash кода           | 7d95d20f5d10…                                                                                                                                        |
 
 > [!note] Как читать Δ
 > Положительное значение означает улучшение — и для maximize, и для minimize-метрик.
@@ -209,5 +210,5 @@ decision: pending
 > `src/ml_project/experiments/exp_002_age_imputation.py`. После выбора решения
 > карточка и registry синхронизируются из этого модуля.
 
-- **Предварительный вывод до формализации критерия:** iterate.
-- **Следующий шаг:**Принимаем это изменение!
+- **Итоговое решение:** adopt — принимаем новый fold-safe Age imputer.
+- **Следующий шаг:** использовать EXP-002 как champion reference для EXP-003.

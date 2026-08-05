@@ -60,12 +60,17 @@ tags:
 
 > [!tip] Новый контролируемый эксперимент
 > 1. Активируйте окружение: `conda activate titanik-ml`.
-> 2. Из корня проекта запустите `.\new-experiment.cmd`.
-> 3. Заполните созданный модуль в `src/ml_project/experiments/`.
-> 4. Перезапустите kernel и выполните [[notebooks/04_experiment.ipynb]] сверху вниз.
+> 2. Из корня проекта запустите `.\new-experiment.cmd`: launcher создаст модуль и локальный workbench.
+> 3. Разработайте и проверьте идею в напечатанном `notebooks/workbench/EXP-xxx_*.ipynb`.
+> 4. Перенесите проверенную реализацию в созданный модуль `src/ml_project/experiments/exp_xxx_*.py`.
+> 5. Перезапустите kernel и выполните строгий [[notebooks/04_experiment.ipynb]] сверху вниз.
+> 6. После интерпретации задайте `decision="adopt"` только принятому улучшению:
+>    следующий launcher автоматически использует его как champion reference.
 >
 > Launcher сам предложит следующий `EXP-xxx`, критерии и guardrails, покажет
-> preview и выберет новый модуль для общего notebook.
+> preview, родителя и выберет новый модуль. `--from-baseline` создаёт независимую
+> проверку без champion. Workbench не пишет официальные результаты и игнорируется
+> Git; source of truth остаётся в Python-модуле.
 
 Подробности полей, критериев и жизненного цикла: [[GUIDE.md#Новый эксперимент|руководство по новому эксперименту]].
 
@@ -99,7 +104,8 @@ tags:
 | Версия / эксперимент                                                                                       | Метрика  | Значение | Δ к baseline | Решение   |
 | ---------------------------------------------------------------------------------------------------------- | -------- | -------: | -----------: | --------- |
 | [[experiments/EXP-001 Baseline.md\|EXP-001 Baseline]]                                                      | accuracy |   0.7969 |            — | reference |
-| [[experiments/EXP-002 AGE_Experiment.md\|EXP-002 — Заполнение пропусков Age с помощью "Title" и "Pclass"]] | accuracy |   0.8036 |      +0.0067 | pending   |
+| [[experiments/EXP-002 AGE_Experiment.md\|EXP-002 — Заполнение пропусков Age с помощью "Title" и "Pclass"]] | accuracy |   0.8036 |      +0.0067 | adopt     |
+| [[experiments/EXP-003 Family Size.md\|EXP-003 — Объединение SibSp и Parch в признак FamilySizeGroup]]      | accuracy |   0.8204 |      +0.0168 | adopt     |
 
 <!-- auto:key-results:end -->
 

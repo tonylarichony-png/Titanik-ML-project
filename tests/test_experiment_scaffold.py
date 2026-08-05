@@ -1,20 +1,197 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from ml_project.experiment_scaffold import (
+    find_adopted_champion_module,
     find_next_experiment_id,
     main,
     parse_guardrails,
     scaffold_experiment,
+    selected_experiment_spec,
     slug_from_title,
 )
+from ml_project.experiment_workbench import create_experiment_workbench
 
 
 class ExperimentScaffoldTests(unittest.TestCase):
+    def test_workbench_is_source_only_and_bound_to_module(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = create_experiment_workbench(
+                root,
+                "EXP-003",
+                "Family size",
+                slug="family_size",
+                module_name="ml_project.experiments.exp_003_family_size",
+                parent_experiment_module=(
+                    "ml_project.experiments.exp_002_age_imputation"
+                ),
+            )
+
+            notebook = json.loads(path.read_text(encoding="utf-8"))
+            code_cells = [
+                cell for cell in notebook["cells"] if cell["cell_type"] == "code"
+            ]
+            source = "".join(
+                "".join(cell["source"]) for cell in notebook["cells"]
+            )
+            self.assertEqual(path.name, "EXP-003_family_size.ipynb")
+            self.assertTrue(all(cell["outputs"] == [] for cell in code_cells))
+            self.assertTrue(
+                all(cell["execution_count"] is None for cell in code_cells)
+            )
+            self.assertIn(
+                "ml_project.experiments.exp_003_family_size",
+                source,
+            )
+            self.assertIn(
+                "ml_project.experiments.exp_002_age_imputation",
+                source,
+            )
+            self.assertIn("build_reference_pipeline", source)
+            self.assertIn("RUN_MODULE_SMOKE = False", source)
+            self.assertNotIn("sync_experiment_docs(", source)
+
+    def test_selected_spec_does_not_import_unfinished_module(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "src/ml_project/experiments"
+            package.mkdir(parents=True)
+            selector = root / "src/ml_project/experiment_config.py"
+            selector.write_text(
+                'EXPERIMENT_MODULE = "ml_project.experiments.exp_003_draft"\n',
+                encoding="utf-8",
+            )
+            (package / "exp_003_draft.py").write_text(
+                "from package_that_does_not_exist import value\n\n"
+                "EXPERIMENT = ExperimentSettings(\n"
+                '    experiment_id="EXP-003",\n'
+                '    experiment_title="Draft feature",\n'
+                ")\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                selected_experiment_spec(root),
+                (
+                    "EXP-003",
+                    "Draft feature",
+                    "draft",
+                    "ml_project.experiments.exp_003_draft",
+                    None,
+                ),
+            )
+            result = main(
+                ["--project-root", str(root), "--workbench-only"]
+            )
+            self.assertEqual(result, 0)
+            self.assertTrue(
+                (root / "notebooks/workbench/EXP-003_draft.ipynb").is_file()
+            )
+            original = (
+                root / "notebooks/workbench/EXP-003_draft.ipynb"
+            ).read_bytes()
+            self.assertEqual(
+                main(["--project-root", str(root), "--workbench-only"]),
+                0,
+            )
+            self.assertEqual(
+                (
+                    root / "notebooks/workbench/EXP-003_draft.ipynb"
+                ).read_bytes(),
+                original,
+            )
+
+    def test_cli_creates_module_and_workbench_together(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "src/ml_project/experiments"
+            package.mkdir(parents=True)
+            selector = root / "src/ml_project/experiment_config.py"
+            selector.write_text(
+                'EXPERIMENT_MODULE = "ml_project.experiments.old"\n',
+                encoding="utf-8",
+            )
+
+            result = main(
+                [
+                    "EXP-003",
+                    "--title",
+                    "Family size",
+                    "--slug",
+                    "family_size",
+                    "--min-improvement",
+                    "0.005",
+                    "--project-root",
+                    str(root),
+                ]
+            )
+
+            self.assertEqual(result, 0)
+            self.assertTrue(
+                (package / "exp_003_family_size.py").is_file()
+            )
+            self.assertTrue(
+                (
+                    root
+                    / "notebooks/workbench/EXP-003_family_size.ipynb"
+                ).is_file()
+            )
+
+    def test_latest_adopted_champion_is_embedded(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "src/ml_project/experiments"
+            package.mkdir(parents=True)
+            selector = root / "src/ml_project/experiment_config.py"
+            selector.write_text(
+                'EXPERIMENT_MODULE = "ml_project.experiments.old"\n',
+                encoding="utf-8",
+            )
+            parent_module = package / "exp_002_parent.py"
+            parent_module.write_text(
+                "EXPERIMENT = ExperimentSettings(\n"
+                '    experiment_id="EXP-002",\n'
+                '    experiment_title="Parent",\n'
+                '    decision="adopt",\n'
+                ")\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                find_adopted_champion_module(root),
+                "ml_project.experiments.exp_002_parent",
+            )
+            result = main(
+                [
+                    "EXP-003",
+                    "--title",
+                    "Child",
+                    "--slug",
+                    "child",
+                    "--min-improvement",
+                    "0.01",
+                    "--project-root",
+                    str(root),
+                ]
+            )
+
+            self.assertEqual(result, 0)
+            source = (package / "exp_003_child.py").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn(
+                "parent_experiment_module="
+                "'ml_project.experiments.exp_002_parent'",
+                source,
+            )
+            self.assertIn("reference_model='champion_reference'", source)
+
     def test_interactive_preview_can_be_cancelled_without_writes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

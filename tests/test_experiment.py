@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -94,6 +95,7 @@ def configured_experiment(**changes: object):
         "sync_experiment_note": True,
         "sync_docs": True,
         "allow_overwrite": True,
+        "parent_experiment_module": None,
     }
     defaults.update(changes)
     settings = replace(settings, **defaults)
@@ -236,11 +238,104 @@ class ExperimentDocumentSyncTests(unittest.TestCase):
 
 @unittest.skipUnless(DEPENDENCIES_AVAILABLE, "modeling dependencies unavailable")
 class ExperimentTests(unittest.TestCase):
+    def test_adopted_parent_data_and_model_are_composed(self) -> None:
+        parent_module = "ml_project.experiments.exp_002_parent"
+        parent_settings = configured_experiment(
+            experiment_id="EXP-002",
+            decision="adopt",
+        )
+        child_settings = configured_experiment(
+            experiment_id="EXP-003",
+            reference_model="champion_reference",
+            parent_experiment_module=parent_module,
+        )
+
+        def parent_prepare(data, groups, settings):
+            result = data.copy(deep=True)
+            result["parent_feature"] = 1
+            updated = {key: list(value) for key, value in groups.items()}
+            updated["count"].append("parent_feature")
+            return experiment_tools.ExperimentData(
+                result,
+                updated,
+                settings,
+            )
+
+        def child_prepare(data, groups, settings):
+            result = data.copy(deep=True)
+            result["child_feature"] = 2
+            updated = {key: list(value) for key, value in groups.items()}
+            updated["count"].append("child_feature")
+            return experiment_tools.ExperimentData(
+                result,
+                updated,
+                settings,
+            )
+
+        def parent_models(preprocessor, settings, experiment):
+            return {"candidate": ("parent-model", preprocessor)}
+
+        parent = experiment_tools.ExperimentDefinition(
+            module_name=parent_module,
+            source_path=Path(__file__).resolve(),
+            source_sha256="a" * 64,
+            settings=parent_settings,
+            prepare_data=parent_prepare,
+            build_models=parent_models,
+        )
+        child = experiment_tools.ExperimentDefinition(
+            module_name="ml_project.experiments.exp_003_child",
+            source_path=Path(__file__).resolve(),
+            source_sha256="b" * 64,
+            settings=child_settings,
+            prepare_data=child_prepare,
+            build_models=lambda *_: {},
+        )
+        raw = frame()
+        settings = configured_baseline()
+
+        with patch(
+            "ml_project.experiment.load_experiment",
+            return_value=parent,
+        ):
+            reference = experiment_tools.prepare_experiment_parent(
+                child,
+                raw,
+                FEATURE_GROUPS,
+                settings,
+            )
+            candidate = experiment_tools.prepare_experiment_candidate(
+                child,
+                raw,
+                FEATURE_GROUPS,
+                settings,
+            )
+            model = experiment_tools.build_experiment_reference(
+                child,
+                "preprocessor",
+                settings,
+            )
+
+        self.assertNotIn("parent_feature", raw)
+        self.assertIn("parent_feature", reference.frame)
+        self.assertNotIn("child_feature", reference.frame)
+        self.assertIn("parent_feature", candidate.frame)
+        self.assertIn("child_feature", candidate.frame)
+        self.assertEqual(model, ("parent-model", "preprocessor"))
+
     def test_versioned_experiment_module_has_source_provenance(self) -> None:
         definition = experiment_tools.load_experiment(
             experiment_config.EXPERIMENT_MODULE
         )
-        self.assertEqual(definition.settings.experiment_id, "EXP-002")
+        expected_stem = definition.settings.experiment_id.lower().replace(
+            "-",
+            "_",
+        )
+        self.assertTrue(definition.source_path.stem.startswith(expected_stem))
+        self.assertEqual(
+            definition.module_name,
+            experiment_config.EXPERIMENT_MODULE,
+        )
         self.assertTrue(definition.source_path.is_file())
         self.assertEqual(len(definition.source_sha256), 64)
 

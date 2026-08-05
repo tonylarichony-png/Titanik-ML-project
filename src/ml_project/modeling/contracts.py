@@ -108,6 +108,7 @@ class ExperimentSettings:
     sync_experiment_note: bool
     sync_docs: bool
     allow_overwrite: bool
+    parent_experiment_module: str | None = None
 
 
 @dataclass(frozen=True)

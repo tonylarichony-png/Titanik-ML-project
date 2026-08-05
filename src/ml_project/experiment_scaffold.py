@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import math
 import re
 import sys
@@ -10,9 +11,23 @@ import textwrap
 from pathlib import Path
 from typing import Mapping
 
+try:
+    from .experiment_workbench import (
+        create_experiment_workbench,
+        workbench_path,
+    )
+except ImportError:  # Direct execution from src/ml_project.
+    from experiment_workbench import (
+        create_experiment_workbench,
+        workbench_path,
+    )
+
 
 EXPERIMENT_ID_PATTERN = re.compile(r"EXP-\d{3,}")
 SLUG_PATTERN = re.compile(r"[a-z][a-z0-9_]*")
+SELECTOR_PATTERN = re.compile(
+    r'(?m)^EXPERIMENT_MODULE\s*=\s*["\']([^"\']+)["\']\s*$'
+)
 CYRILLIC_TO_LATIN = {
     "а": "a",
     "б": "b",
@@ -122,15 +137,143 @@ def _confirmed() -> bool:
     return answer in {"y", "yes", "д", "да"}
 
 
+def _experiment_literals(
+    module_path: Path,
+    names: set[str],
+) -> dict[str, object]:
+    tree = ast.parse(
+        module_path.read_text(encoding="utf-8"),
+        filename=str(module_path),
+    )
+    experiment_call = None
+    for node in tree.body:
+        if (
+            isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "EXPERIMENT"
+                for target in node.targets
+            )
+            and isinstance(node.value, ast.Call)
+        ):
+            experiment_call = node.value
+            break
+    if experiment_call is None:
+        raise ValueError(f"Cannot find EXPERIMENT assignment in {module_path}")
+    return {
+        keyword.arg: ast.literal_eval(keyword.value)
+        for keyword in experiment_call.keywords
+        if keyword.arg in names
+    }
+
+
+def _module_path(project_root: Path, module_name: str) -> Path:
+    return (
+        Path(project_root).resolve()
+        / "src"
+        / (module_name.replace(".", "/") + ".py")
+    )
+
+
+def find_adopted_champion_module(project_root: Path) -> str | None:
+    """Return the latest explicitly adopted experiment module."""
+
+    root = Path(project_root).resolve()
+    package = root / "src/ml_project/experiments"
+    adopted: list[tuple[int, str]] = []
+    if not package.exists():
+        return None
+    for module_path in package.glob("exp_*.py"):
+        values = _experiment_literals(
+            module_path,
+            {"experiment_id", "decision"},
+        )
+        experiment_id = str(values.get("experiment_id", ""))
+        match = re.fullmatch(r"EXP-(\d+)", experiment_id)
+        if match and values.get("decision") == "adopt":
+            adopted.append(
+                (
+                    int(match.group(1)),
+                    f"ml_project.experiments.{module_path.stem}",
+                )
+            )
+    return max(adopted)[1] if adopted else None
+
+
+def validate_parent_module(project_root: Path, module_name: str) -> None:
+    """Require an existing adopted module before using it as champion."""
+
+    module_path = _module_path(project_root, module_name)
+    if not module_path.exists():
+        raise FileNotFoundError(f"Parent experiment module not found: {module_path}")
+    values = _experiment_literals(
+        module_path,
+        {"experiment_id", "decision"},
+    )
+    if values.get("decision") != "adopt":
+        raise ValueError(
+            f"Parent {values.get('experiment_id', module_name)} must have "
+            "decision='adopt'"
+        )
+
+
+def selected_experiment_spec(
+    project_root: Path,
+) -> tuple[str, str, str, str, str | None]:
+    """Read selected metadata without importing unfinished experiment code."""
+
+    root = Path(project_root).resolve()
+    selector_path = root / "src/ml_project/experiment_config.py"
+    selector = selector_path.read_text(encoding="utf-8")
+    match = SELECTOR_PATTERN.search(selector)
+    if not match:
+        raise ValueError(
+            f"Cannot find EXPERIMENT_MODULE assignment in {selector_path}"
+        )
+    module_name = match.group(1)
+    module_path = _module_path(root, module_name)
+    if not module_path.exists():
+        raise FileNotFoundError(f"Selected experiment module not found: {module_path}")
+
+    values = _experiment_literals(
+        module_path,
+        {
+            "experiment_id",
+            "experiment_title",
+            "parent_experiment_module",
+        },
+    )
+    experiment_id = str(values.get("experiment_id", ""))
+    title = str(values.get("experiment_title", ""))
+    stem_match = re.fullmatch(r"exp_\d+_(.+)", module_path.stem)
+    if not experiment_id or not title or not stem_match:
+        raise ValueError(
+            f"Cannot resolve experiment ID, title or slug from {module_path}"
+        )
+    parent = values.get("parent_experiment_module")
+    return (
+        experiment_id,
+        title,
+        stem_match.group(1),
+        module_name,
+        str(parent) if parent else None,
+    )
+
+
 def _module_source(
     experiment_id: str,
     title: str,
     slug: str,
     primary_improvement_min: float,
     metric_guardrails: Mapping[str, float],
+    parent_experiment_module: str | None,
 ) -> str:
     module_run = experiment_id.lower().replace("-", "_")
     note_title = slug.replace("_", " ").title()
+    reference_model = (
+        "champion_reference"
+        if parent_experiment_module is not None
+        else "baseline_reference"
+    )
     return textwrap.dedent(
         f'''\
         """{experiment_id}: {title}."""
@@ -143,6 +286,7 @@ def _module_source(
 
         import pandas as pd
 
+        from ml_project.experiment import build_reference_pipeline
         from ml_project.modeling import (
             BaselineSettings,
             ExperimentData,
@@ -164,7 +308,7 @@ def _module_source(
             ),
             primary_improvement_min={primary_improvement_min!r},
             metric_guardrails={dict(metric_guardrails)!r},
-            reference_model="baseline_reference",
+            reference_model={reference_model!r},
             primary_candidate="candidate",
             experiment_parameters={{
                 # "important_parameter": "...",
@@ -180,6 +324,7 @@ def _module_source(
             sync_experiment_note=True,
             sync_docs=True,
             allow_overwrite=True,
+            parent_experiment_module={parent_experiment_module!r},
         )
 
 
@@ -211,6 +356,13 @@ def _module_source(
         ) -> dict[str, Any]:
             """Return candidates keyed by experiment_settings.primary_candidate."""
 
+            # For a feature-only change on top of the adopted champion:
+            # candidate = build_reference_pipeline(
+            #     experiment_settings.parent_experiment_module,
+            #     preprocessor,
+            #     candidate_settings,
+            # )
+            # return {{experiment_settings.primary_candidate: candidate}}
             raise NotImplementedError(
                 "CHANGE ME — build one sklearn-compatible candidate Pipeline"
             )
@@ -233,6 +385,7 @@ def scaffold_experiment(
     slug: str,
     primary_improvement_min: float = 0.0,
     metric_guardrails: Mapping[str, float] | None = None,
+    parent_experiment_module: str | None = None,
     select: bool = True,
 ) -> tuple[Path, str]:
     """Create one experiment module and optionally select it for the notebook."""
@@ -249,6 +402,8 @@ def scaffold_experiment(
     if not math.isfinite(primary_improvement_min):
         raise ValueError("primary_improvement_min must be finite")
     guardrails = dict(metric_guardrails or {})
+    if parent_experiment_module is not None:
+        validate_parent_module(root, parent_experiment_module)
     for metric, threshold in guardrails.items():
         if not str(metric).strip():
             raise ValueError("metric_guardrails contains an empty metric")
@@ -276,12 +431,9 @@ def scaffold_experiment(
 
     selector_path = root / "src/ml_project/experiment_config.py"
     selector = ""
-    selector_pattern = re.compile(
-        r'(?m)^EXPERIMENT_MODULE\s*=\s*["\'][^"\']+["\']\s*$'
-    )
     if select:
         selector = selector_path.read_text(encoding="utf-8")
-        if not selector_pattern.search(selector):
+        if not SELECTOR_PATTERN.search(selector):
             raise ValueError(
                 f"Cannot find EXPERIMENT_MODULE assignment in {selector_path}"
             )
@@ -293,6 +445,7 @@ def scaffold_experiment(
             normalized_slug,
             float(primary_improvement_min),
             guardrails,
+            parent_experiment_module,
         ),
         encoding="utf-8",
     )
@@ -301,7 +454,7 @@ def scaffold_experiment(
     if select:
         replacement = f'EXPERIMENT_MODULE = "{module_name}"'
         selector_path.write_text(
-            selector_pattern.sub(replacement, selector, count=1),
+            SELECTOR_PATTERN.sub(replacement, selector, count=1),
             encoding="utf-8",
         )
     return module_path, module_name
@@ -345,8 +498,59 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Skip confirmation when prompts are used",
     )
+    parser.add_argument(
+        "--no-workbench",
+        action="store_true",
+        help="Create only the versioned module",
+    )
+    parser.add_argument(
+        "--workbench-only",
+        action="store_true",
+        help="Create a workbench for the currently selected experiment",
+    )
+    parser.add_argument(
+        "--overwrite-workbench",
+        action="store_true",
+        help="Replace an existing local workbench",
+    )
+    parent_group = parser.add_mutually_exclusive_group()
+    parent_group.add_argument(
+        "--parent-module",
+        help="Explicit adopted experiment module used as champion reference",
+    )
+    parent_group.add_argument(
+        "--from-baseline",
+        action="store_true",
+        help="Ignore adopted champions and compare directly with baseline",
+    )
     args = parser.parse_args(argv)
     root = args.project_root.resolve()
+    if args.workbench_only:
+        (
+            experiment_id,
+            title,
+            slug,
+            module_name,
+            parent_experiment_module,
+        ) = selected_experiment_spec(root)
+        planned_workbench = workbench_path(root, experiment_id, slug)
+        if planned_workbench.exists() and not args.overwrite_workbench:
+            print(f"Workbench already exists: {planned_workbench}")
+            print("Existing notebook was not changed.")
+            return 0
+        path = create_experiment_workbench(
+            root,
+            experiment_id,
+            title,
+            slug=slug,
+            module_name=module_name,
+            parent_experiment_module=parent_experiment_module,
+            overwrite=args.overwrite_workbench,
+        )
+        print(f"Workbench: {path}")
+        print("Official reports were not changed.")
+        return 0
+
     interactive = (
         args.experiment_id is None
         or args.title is None
@@ -389,6 +593,20 @@ def main(argv: list[str] | None = None) -> int:
         guardrails = parse_guardrails(",".join(guardrail_values))
     except ValueError as error:
         parser.error(str(error))
+    parent_experiment_module = (
+        None
+        if args.from_baseline
+        else (
+            args.parent_module
+            if args.parent_module
+            else find_adopted_champion_module(root)
+        )
+    )
+    if parent_experiment_module is not None:
+        try:
+            validate_parent_module(root, parent_experiment_module)
+        except (FileNotFoundError, ValueError) as error:
+            parser.error(str(error))
 
     if interactive:
         module_stem = (
@@ -401,10 +619,23 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  Модуль: src/ml_project/experiments/{module_stem}.py")
         print(f"  Минимальное улучшение: {primary_improvement_min:+.4f}")
         print(f"  Guardrails: {guardrails or 'нет'}")
+        print(
+            "  Reference: "
+            + (parent_experiment_module or "baseline_config.BASELINE")
+        )
         print(f"  Выбрать для notebook: {not args.no_select}")
+        print(f"  Создать локальный workbench: {not args.no_workbench}")
         if not args.yes and not _confirmed():
             print("Отменено: файлы не изменены.")
             return 0
+
+    if not args.no_workbench:
+        planned_workbench = workbench_path(root, experiment_id, slug)
+        if planned_workbench.exists() and not args.overwrite_workbench:
+            parser.error(
+                "local workbench already exists; use --overwrite-workbench "
+                f"to replace it: {planned_workbench}"
+            )
 
     path, module_name = scaffold_experiment(
         root,
@@ -413,10 +644,27 @@ def main(argv: list[str] | None = None) -> int:
         slug=slug,
         primary_improvement_min=primary_improvement_min,
         metric_guardrails=guardrails,
+        parent_experiment_module=parent_experiment_module,
         select=not args.no_select,
     )
+    workbench = None
+    if not args.no_workbench:
+        workbench = create_experiment_workbench(
+            root,
+            experiment_id,
+            title,
+            slug=slug,
+            module_name=module_name,
+            parent_experiment_module=parent_experiment_module,
+            overwrite=args.overwrite_workbench,
+        )
     print(f"Created: {path}")
     print(f"Module: {module_name}")
+    print(f"Reference: {parent_experiment_module or 'baseline_config.BASELINE'}")
+    if workbench is not None:
+        print(f"Workbench: {workbench}")
+        print("Next: develop in the workbench, then promote code to the module.")
+        print("Official run: notebooks/04_experiment.ipynb")
     if not args.no_select:
         print("Selected in: src/ml_project/experiment_config.py")
     return 0

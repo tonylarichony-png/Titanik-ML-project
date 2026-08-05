@@ -78,6 +78,37 @@ def load_experiment(
     )
 
 
+def resolve_experiment_lineage(
+    definition: ExperimentDefinition,
+    *,
+    require_adopted: bool = True,
+) -> tuple[ExperimentDefinition, ...]:
+    """Return parents from immediate to oldest and reject broken lineages."""
+
+    lineage: list[ExperimentDefinition] = []
+    path = [definition.module_name]
+    seen = set(path)
+    current = definition
+    while current.settings.parent_experiment_module:
+        module_name = current.settings.parent_experiment_module
+        if module_name in seen:
+            chain = " -> ".join([*path, module_name])
+            raise ValueError(f"Experiment lineage contains a cycle: {chain}")
+        parent = load_experiment(module_name)
+        validate_settings(parent.settings)
+        if require_adopted and parent.settings.decision != "adopt":
+            raise ValueError(
+                f"{current.settings.experiment_id} cannot use "
+                f"{parent.settings.experiment_id} as champion: parent decision "
+                f"is {parent.settings.decision!r}, expected 'adopt'"
+            )
+        lineage.append(parent)
+        path.append(module_name)
+        seen.add(module_name)
+        current = parent
+    return tuple(lineage)
+
+
 def validate_settings(settings: ExperimentSettings) -> None:
     errors: list[str] = []
     name_pattern = r"[A-Za-z0-9][A-Za-z0-9._-]*"
@@ -108,6 +139,16 @@ def validate_settings(settings: ExperimentSettings) -> None:
         errors.append(
             "EXPERIMENT.reference_model and EXPERIMENT.primary_candidate "
             "must be different"
+        )
+    if (
+        settings.parent_experiment_module is not None
+        and not settings.parent_experiment_module.startswith(
+            EXPERIMENT_MODULE_PREFIX
+        )
+    ):
+        errors.append(
+            "EXPERIMENT.parent_experiment_module must start with "
+            f"{EXPERIMENT_MODULE_PREFIX!r}"
         )
     if settings.decision not in DECISIONS:
         errors.append(
@@ -151,6 +192,11 @@ def settings_report(settings: ExperimentSettings) -> pd.DataFrame:
             settings.metric_guardrails or "none",
         ),
         ("comparison", "reference_model", settings.reference_model),
+        (
+            "comparison",
+            "parent_experiment_module",
+            settings.parent_experiment_module or "baseline",
+        ),
         ("comparison", "primary_candidate", settings.primary_candidate),
         ("comparison", "decision", settings.decision),
         ("write", "run_name", settings.run_name),
@@ -164,25 +210,138 @@ def settings_report(settings: ExperimentSettings) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["section", "parameter", "value"])
 
 
+def _run_prepare_hook(
+    definition: ExperimentDefinition,
+    frame: pd.DataFrame,
+    feature_groups: Mapping[str, Any],
+    settings: BaselineSettings,
+) -> ExperimentData:
+    prepared = definition.prepare_data(
+        frame.copy(deep=True),
+        copy.deepcopy(feature_groups),
+        settings,
+    )
+    if not isinstance(prepared, ExperimentData):
+        raise TypeError(
+            f"{definition.module_name}.prepare_candidate_data must return "
+            "ExperimentData"
+        )
+    return prepared
+
+
+def prepare_experiment_parent(
+    definition: ExperimentDefinition,
+    train: pd.DataFrame,
+    feature_groups: Mapping[str, Any],
+    baseline_settings: BaselineSettings,
+) -> ExperimentData:
+    """Apply every adopted ancestor data hook, oldest parent first."""
+
+    return prepare_reference_experiment_data(
+        definition.settings.parent_experiment_module,
+        train,
+        feature_groups,
+        baseline_settings,
+    )
+
+
+def prepare_reference_experiment_data(
+    parent_experiment_module: str | None,
+    train: pd.DataFrame,
+    feature_groups: Mapping[str, Any],
+    baseline_settings: BaselineSettings,
+) -> ExperimentData:
+    """Prepare the complete baseline/adopted-parent reference data recipe."""
+
+    if parent_experiment_module is None:
+        return ExperimentData(
+            frame=train.copy(deep=True),
+            feature_groups=copy.deepcopy(feature_groups),
+            settings=baseline_settings,
+            diagnostics={},
+        )
+    parent = load_experiment(parent_experiment_module)
+    validate_settings(parent.settings)
+    if parent.settings.decision != "adopt":
+        raise ValueError(
+            f"Champion parent {parent.settings.experiment_id} has decision "
+            f"{parent.settings.decision!r}; expected 'adopt'"
+        )
+    context = ExperimentData(
+        frame=train.copy(deep=True),
+        feature_groups=copy.deepcopy(feature_groups),
+        settings=baseline_settings,
+        diagnostics={},
+    )
+    stack = [*reversed(resolve_experiment_lineage(parent)), parent]
+    for item in stack:
+        context = _run_prepare_hook(
+            item,
+            context.frame,
+            context.feature_groups,
+            context.settings,
+        )
+    return context
+
+
 def prepare_experiment_candidate(
     definition: ExperimentDefinition,
     train: pd.DataFrame,
     feature_groups: Mapping[str, Any],
     baseline_settings: BaselineSettings,
 ) -> ExperimentData:
-    """Run the experiment-owned data hook and validate its public contract."""
+    """Apply adopted parent data hooks and then the selected experiment hook."""
 
-    candidate_data = definition.prepare_data(
-        train.copy(deep=True),
-        copy.deepcopy(feature_groups),
+    parent = prepare_experiment_parent(
+        definition,
+        train,
+        feature_groups,
         baseline_settings,
     )
-    if not isinstance(candidate_data, ExperimentData):
-        raise TypeError(
-            f"{definition.module_name}.prepare_candidate_data must return "
-            "ExperimentData"
+    return _run_prepare_hook(
+        definition,
+        parent.frame,
+        parent.feature_groups,
+        parent.settings,
+    )
+
+
+def build_reference_pipeline(
+    parent_experiment_module: str | None,
+    preprocessor: Any,
+    settings: BaselineSettings,
+) -> Any:
+    """Build baseline or the exact primary candidate of an adopted parent."""
+
+    if parent_experiment_module is None:
+        return modeling_tools.build_model_pipeline(
+            preprocessor,
+            modeling_tools.build_simple_estimator(settings),
         )
-    return candidate_data
+    parent = load_experiment(parent_experiment_module)
+    validate_settings(parent.settings)
+    if parent.settings.decision != "adopt":
+        raise ValueError(
+            f"Champion parent {parent.settings.experiment_id} has decision "
+            f"{parent.settings.decision!r}; expected 'adopt'"
+        )
+    resolve_experiment_lineage(parent)
+    models = build_experiment_candidates(parent, preprocessor, settings)
+    return models[parent.settings.primary_candidate]
+
+
+def build_experiment_reference(
+    definition: ExperimentDefinition,
+    preprocessor: Any,
+    settings: BaselineSettings,
+) -> Any:
+    """Build the selected experiment's explicit baseline/champion reference."""
+
+    return build_reference_pipeline(
+        definition.settings.parent_experiment_module,
+        preprocessor,
+        settings,
+    )
 
 
 def build_experiment_candidates(
@@ -234,7 +393,7 @@ def prepare_experiment_data(
     ]
     if changed_reference_features:
         raise ValueError(
-            "Do not overwrite raw baseline features in experiment_frame. "
+            "Do not overwrite raw baseline/champion features in experiment_frame. "
             "Create a new feature or transform it inside the candidate Pipeline: "
             + ", ".join(changed_reference_features)
         )
@@ -430,6 +589,10 @@ def save_experiment_run(
                     project_root, definition.source_path
                 ),
                 "implementation_sha256": definition.source_sha256,
+                "experiment_lineage": _lineage_provenance(
+                    project_root,
+                    definition,
+                ),
             }
         )
     baseline_config_path = (
@@ -457,6 +620,41 @@ def _vault_relative(project_root: Path, path: Path) -> str:
 
 def _short_version(value: str) -> str:
     return value if len(value) <= 16 else value[:12] + "…"
+
+
+def _lineage_provenance(
+    project_root: Path,
+    definition: ExperimentDefinition,
+) -> list[dict[str, Any]]:
+    definitions = [
+        *reversed(resolve_experiment_lineage(definition)),
+        definition,
+    ]
+    return [
+        {
+            "experiment_id": item.settings.experiment_id,
+            "module": item.module_name,
+            "path": _vault_relative(project_root, item.source_path),
+            "sha256": item.source_sha256,
+            "candidate": item.settings.primary_candidate,
+            "decision": item.settings.decision,
+        }
+        for item in definitions
+    ]
+
+
+def _lineage_markdown(
+    definition: ExperimentDefinition,
+) -> str:
+    parents = list(reversed(resolve_experiment_lineage(definition)))
+    links = ["EXP-001"]
+    links.extend(
+        f"[[{parent.settings.experiment_note.as_posix()}|"
+        f"{parent.settings.experiment_id}]]"
+        for parent in parents
+    )
+    links.append(definition.settings.experiment_id)
+    return " → ".join(links)
 
 
 def build_experiment_report(
@@ -495,6 +693,7 @@ def build_experiment_report(
         implementation = _vault_relative(project_root, definition.source_path)
         overview_rows.extend(
             [
+                ("Цепочка", _lineage_markdown(definition)),
                 ("Код эксперимента", f"[[{implementation}|{definition.module_name}]]"),
                 ("Hash кода", definition.source_sha256[:12] + "…"),
             ]
@@ -705,8 +904,21 @@ def _registry_row(
             sort_keys=True,
         ),
         "decision": settings.decision,
+        "parent_experiment_id": "EXP-001",
+        "parent_experiment_module": "",
+        "parent_implementation_sha256": "",
     }
     if definition is not None:
+        lineage = resolve_experiment_lineage(definition)
+        if lineage:
+            parent = lineage[0]
+            result.update(
+                {
+                    "parent_experiment_id": parent.settings.experiment_id,
+                    "parent_experiment_module": parent.module_name,
+                    "parent_implementation_sha256": parent.source_sha256,
+                }
+            )
         result.update(
             {
                 "implementation_module": definition.module_name,
@@ -759,6 +971,7 @@ def sync_experiment_docs(
     latest = pd.DataFrame(
         [
             ("Эксперимент", f"[[{row['note']}|{row['experiment_id']} — {row['title']}]]"),
+            ("Родитель", row["parent_experiment_id"]),
             ("Гипотеза", row["hypothesis"]),
             ("Изменение", row["change"]),
             ("Метрика", row["primary_metric"]),
@@ -780,6 +993,7 @@ def sync_experiment_docs(
     leaderboard = leaderboard[
         [
             "Experiment",
+            "parent_experiment_id",
             "hypothesis",
             "change",
             "primary_metric",
@@ -792,6 +1006,7 @@ def sync_experiment_docs(
     ].rename(
         columns={
             "hypothesis": "Hypothesis", "change": "Change",
+            "parent_experiment_id": "Parent",
             "primary_metric": "Metric", "reference_score": "Reference",
             "candidate_score": "Result", "improvement": "Δ",
             "criteria_passed": "Criteria",
@@ -803,10 +1018,20 @@ def sync_experiment_docs(
         if baseline_settings is not None
         else Path("experiments/EXP-001 Baseline.md")
     )
+    baseline_rows = registry[
+        registry["parent_experiment_id"].astype(str).eq("EXP-001")
+    ]
+    baseline_record = (
+        baseline_rows.sort_values("experiment_id").iloc[0]
+        if not baseline_rows.empty
+        else registry.sort_values("experiment_id").iloc[0]
+    )
+    baseline_score = float(baseline_record["reference_score"])
+    baseline_std = float(baseline_record["reference_std"])
     best_measured = modeling_tools.build_best_result_block(
         baseline_metric=str(row["primary_metric"]),
-        baseline_score=float(row["reference_score"]),
-        baseline_std=float(row["reference_std"]),
+        baseline_score=baseline_score,
+        baseline_std=baseline_std,
         baseline_direction=str(row["direction"]),
         baseline_note=baseline_note,
         experiments=registry,
@@ -829,7 +1054,7 @@ def sync_experiment_docs(
                     else "baseline"
                 ),
                 baseline_metric=str(row["primary_metric"]),
-                baseline_score=float(row["reference_score"]),
+                baseline_score=baseline_score,
             )
         }
     )
@@ -837,7 +1062,7 @@ def sync_experiment_docs(
         {
             "key-results": modeling_tools.build_key_results_block(
                 baseline_metric=str(row["primary_metric"]),
-                baseline_score=float(row["reference_score"]),
+                baseline_score=baseline_score,
                 baseline_note=baseline_note,
                 experiments=registry,
             )
@@ -856,11 +1081,16 @@ __all__ = [
     "ExperimentDefinition",
     "ExperimentSettings",
     "build_experiment_candidates",
+    "build_experiment_reference",
     "build_experiment_report",
+    "build_reference_pipeline",
     "comparison_summary",
     "load_experiment",
     "prepare_experiment_candidate",
     "prepare_experiment_data",
+    "prepare_experiment_parent",
+    "prepare_reference_experiment_data",
+    "resolve_experiment_lineage",
     "save_experiment_run",
     "settings_report",
     "success_criteria_report",

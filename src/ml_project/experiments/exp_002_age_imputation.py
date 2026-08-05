@@ -45,7 +45,7 @@ EXPERIMENT = ExperimentSettings(
         "title_groups": ["Mr", "Mrs", "Miss", "Master"],
         "fallback": ["Title", "global_median"],
     },
-    decision="pending",
+    decision="adopt",
     run_name="exp_002_v1",
     artifact_dir=Path("artifacts/experiments"),
     results_registry=Path("experiments/results.csv"),
