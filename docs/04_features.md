@@ -24,17 +24,33 @@ tags:
 DATA snapshot → фильтры / join → split по [[docs/03_validation.md]] → preprocessing внутри folds → model-ready matrices
 ```
 
-- **Исходная версия данных:**
-- **Критерии включения:**
-- **Критерии исключения:**
-- **Правила join:**
-- **Фильтры:**
-- **Строк до / после обработки:**
-- **Выходной артефакт или код построения:**
+<!-- auto:model-ready-contract:start -->
 
-| Решение | Основание из EDA | Реализация | Влияние на строки | Статус |
-|---|---|---|---:|---|
-|  |  |  |  | candidate / active / rejected |
+| Поле                         | Исполняемое значение                 |
+| ---------------------------- | ------------------------------------ |
+| Версия данных                | 7d118fef8b6c…                        |
+| Включённые группы            | numeric, count, categorical, ordinal |
+| Числовые признаки            | Age, SibSp, Parch, Fare              |
+| Категориальные признаки      | Pclass, Sex, Embarked                |
+| Исключённые признаки         | PassengerId, Name, Ticket, Cabin     |
+| Признаков в модели           | 7                                    |
+| Строк в model-ready train    | 891                                  |
+| Target                       | Survived                             |
+| Inference schema обязательна | True                                 |
+
+<!-- auto:model-ready-contract:end -->
+
+### Ручные решения о составе строк
+
+- **Правила join:**
+- **Фильтры строк:**
+- **Почему эти фильтры допустимы:**
+
+| Решение                             | Основание из EDA       | Реализация                 |                                                            Влияние на строки | Статус     |
+| ----------------------------------- | ---------------------- | -------------------------- | ---------------------------------------------------------------------------: | --------- |
+| Заполненение пропуска по AGEx TITLE | [[EDA-012]][[EDA-014]] | [[EXP-002 AGE_Experiment]] | +0.0067прирость accyracy- F1: +0.0050      ROC-AUC: +0.0045- Recall: −0.0058   active  ed |
+|                                     |                        |                            |                                                                                           |
+|                                     |                        |                            |                                                                                           |
 
 ## Feature strategy
 
@@ -45,9 +61,23 @@ DATA snapshot → фильтры / join → split по [[docs/03_validation.md]]
 
 ## Реестр признаков
 
-| Группа / признак | Источник | Формула / окно | Доступность | Пропуски | Версия | Статус |
-|---|---|---|---|---|---|---|
-|  |  |  | train / inference |  |  | candidate / active / rejected |
+<!-- auto:feature-registry:start -->
+
+| Признак     | Группа      | Роль в модели | Статус   | Причина                                             |
+| ----------- | ----------- | ------------- | -------- | --------------------------------------------------- |
+| Age         | numeric     | numeric       | used     |                                                     |
+| Fare        | numeric     | numeric       | used     |                                                     |
+| SibSp       | count       | numeric       | used     |                                                     |
+| Parch       | count       | numeric       | used     |                                                     |
+| Sex         | categorical | categorical   | used     |                                                     |
+| Cabin       | categorical | —             | excluded | explicit BASELINE.exclude_features                  |
+| Embarked    | categorical | categorical   | used     |                                                     |
+| Pclass      | ordinal     | categorical   | used     |                                                     |
+| Name        | text        | —             | excluded | group 'text' is not enabled for this baseline       |
+| PassengerId | identifier  | —             | excluded | project key / identifier                            |
+| Ticket      | identifier  | —             | excluded | group 'identifier' is not enabled for this baseline |
+
+<!-- auto:feature-registry:end -->
 
 ## Preprocessing
 
@@ -56,18 +86,35 @@ DATA snapshot → фильтры / join → split по [[docs/03_validation.md]]
 Pipeline. Здесь хранится не копия Python-конфига, а **причины решений**,
 ограничения и статус признаков.
 
-### Числовые
+<!-- auto:preprocessing-contract:start -->
 
-- Imputation:
-- Scaling / transforms:
-- Clipping / outliers:
+| Группа      | Шаг                | Исполняемое значение    |
+| ----------- | ------------------ | ----------------------- |
+| Numeric     | Признаки           | Age, SibSp, Parch, Fare |
+| Numeric     | Imputer            | median                  |
+| Numeric     | Missing indicator  | False                   |
+| Numeric     | Scaler             | standard                |
+| Categorical | Признаки           | Pclass, Sex, Embarked   |
+| Categorical | Imputer            | most_frequent           |
+| Categorical | Fill value         | __MISSING__             |
+| Categorical | Unknown categories | ignore                  |
+| Categorical | Min frequency      | None                    |
+| Categorical | Max categories     | None                    |
+| Categorical | Sparse output      | True                    |
 
-### Категориальные
+<!-- auto:preprocessing-contract:end -->
 
-- Encoding:
-- Unknown categories:
-- Rare categories:
-- High cardinality:
+### Обоснование числового preprocessing
+
+- Почему выбран текущий imputer:
+- Почему выбран текущий scaler:
+- Какие выбросы требуют отдельного решения:
+
+### Обоснование категориального preprocessing
+
+- Почему выбран текущий encoder:
+- Риски редких и новых категорий:
+- Признаки высокой кардинальности:
 
 ### Время
 

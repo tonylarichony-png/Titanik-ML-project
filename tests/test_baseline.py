@@ -9,8 +9,15 @@ import numpy as np
 import pandas as pd
 
 import ml_project.baseline_config as baseline_config
+import ml_project.modeling as modeling_tools
 from ml_project.baseline import (
+    CVEvaluation,
+    FeaturePlan,
+    ScoringPlan,
+    build_baseline_experiment_report,
+    build_key_results_block,
     build_metric_figures,
+    build_secondary_metrics_block,
     build_cv_splitter,
     build_dummy_estimator,
     build_model_pipeline,
@@ -22,7 +29,6 @@ from ml_project.baseline import (
     resolve_feature_plan,
     resolve_scoring_plan,
     save_baseline_run,
-    settings_from_module,
     sync_baseline_docs,
     sync_baseline_experiment_note,
     validate_baseline_settings,
@@ -68,7 +74,7 @@ FEATURE_GROUPS = {
 
 
 def configured_settings(**changes: object):
-    settings = settings_from_module(baseline_config)
+    settings = baseline_config.BASELINE
     defaults = {
         "task_type": "binary_classification",
         "model_feature_groups": (
@@ -114,6 +120,283 @@ def problem_doc(root: Path, metric: str) -> None:
         f"# Problem\n\n- Metric: (primary_metric:: {metric})\n",
         encoding="utf-8",
     )
+
+
+class TrackedMetricFigureTests(unittest.TestCase):
+    class FakeFigure:
+        def savefig(self, path: Path, **_: object) -> None:
+            path.write_bytes(b"png")
+
+    def test_modeling_package_prepares_data_through_public_api(self) -> None:
+        settings = configured_settings()
+        source = classification_frame()
+        plan = modeling_tools.resolve_feature_plan(
+            source,
+            FEATURE_GROUPS,
+            target="target",
+            key="id",
+            settings=settings,
+        )
+        prepared = modeling_tools.prepare_training_data(
+            source,
+            target="target",
+            plan=plan,
+            settings=settings,
+        )
+        self.assertEqual(prepared.X.shape, (12, 2))
+        self.assertEqual(tuple(prepared.X.columns), ("numeric", "category"))
+        self.assertIs(modeling_tools.CVEvaluation, CVEvaluation)
+
+    def test_metric_figure_is_tracked_and_embedded_by_experiment_id(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            settings = configured_settings(
+                save_metric_figures=True,
+                allow_overwrite=True,
+            )
+            plan = FeaturePlan(
+                numeric=("numeric",),
+                categorical=(),
+                excluded=(),
+                group_by_feature={"numeric": "numeric"},
+                exclusion_reason={},
+            )
+            scoring = ScoringPlan(
+                contract_metric="accuracy",
+                scorers={"primary": "accuracy"},
+                labels={"primary": "Accuracy"},
+                directions={"primary": "maximize"},
+                negated={"primary": False},
+            )
+            evaluation = CVEvaluation(
+                fold_scores=pd.DataFrame(
+                    [
+                        {
+                            "model": "simple_model",
+                            "split": "validation",
+                            "fold": 1,
+                            "metric_key": "primary",
+                            "metric": "Accuracy",
+                            "direction": "maximize",
+                            "value": 0.8,
+                            "fit_seconds": 0.1,
+                            "score_seconds": 0.01,
+                        }
+                    ]
+                ),
+                summary=pd.DataFrame(
+                    [
+                        {
+                            "model": "simple_model",
+                            "split": "validation",
+                            "metric_key": "primary",
+                            "metric": "Accuracy",
+                            "direction": "maximize",
+                            "mean": 0.8,
+                            "std": 0.0,
+                            "min": 0.8,
+                            "max": 0.8,
+                            "folds": 1,
+                            "fit_seconds_mean": 0.1,
+                            "score_seconds_mean": 0.01,
+                        }
+                    ]
+                ),
+                raw_results={},
+            )
+
+            saved = save_baseline_run(
+                root,
+                settings,
+                evaluation,
+                plan,
+                scoring,
+                dataset_version="abc123",
+                cv_description="one test fold",
+                metric_figures={"primary": self.FakeFigure()},
+            )
+
+            expected = (
+                root
+                / "assets/experiments/EXP-001/metric-primary-accuracy.png"
+            )
+            self.assertEqual((saved.metric_figure_paths or {})["primary"], expected)
+            self.assertTrue(expected.exists())
+            self.assertFalse((saved.run_dir / expected.name).exists())
+
+            report = build_baseline_experiment_report(
+                root,
+                settings,
+                evaluation,
+                scoring,
+                saved,
+                dataset_version="abc123",
+                cv_description="one test fold",
+            )
+            self.assertIn(
+                "![[assets/experiments/EXP-001/metric-primary-accuracy.png]]",
+                report,
+            )
+            metadata = saved.metadata_path.read_text(encoding="utf-8")
+            self.assertIn(
+                '"primary": "assets/experiments/EXP-001/'
+                'metric-primary-accuracy.png"',
+                metadata,
+            )
+            self.assertIn('"environment": {', metadata)
+            self.assertIn('"scikit-learn":', metadata)
+
+    def test_dashboard_and_secondary_metrics_blocks_are_generated(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "docs").mkdir()
+            (root / "experiments").mkdir()
+            (root / "README.md").write_text(
+                "Manual dashboard\n"
+                "<!-- auto:key-results:start -->\nold\n"
+                "<!-- auto:key-results:end -->\n",
+                encoding="utf-8",
+            )
+            (root / "docs/03_validation.md").write_text(
+                "Manual validation\n"
+                "<!-- auto:secondary-metrics:start -->\nold\n"
+                "<!-- auto:secondary-metrics:end -->\n"
+                "<!-- auto:baseline-results:start -->\nold\n"
+                "<!-- auto:baseline-results:end -->\n",
+                encoding="utf-8",
+            )
+            (root / "docs/05_experiments.md").write_text(
+                "Manual experiments\n"
+                "<!-- auto:current-baseline:start -->\nold\n"
+                "<!-- auto:current-baseline:end -->\n"
+                "<!-- auto:best-measured-result:start -->\nold\n"
+                "<!-- auto:best-measured-result:end -->\n",
+                encoding="utf-8",
+            )
+            (root / "experiments/_index.md").write_text(
+                "<!-- auto:experiment-registry:start -->\nold\n"
+                "<!-- auto:experiment-registry:end -->\n",
+                encoding="utf-8",
+            )
+            evaluation = CVEvaluation(
+                fold_scores=pd.DataFrame(),
+                summary=pd.DataFrame(
+                    [
+                        {
+                            "model": "simple_model",
+                            "split": "validation",
+                            "metric_key": "primary",
+                            "metric": "Accuracy",
+                            "direction": "maximize",
+                            "mean": 0.8,
+                            "std": 0.02,
+                            "min": 0.78,
+                            "max": 0.82,
+                            "folds": 5,
+                        }
+                    ]
+                ),
+                raw_results={},
+            )
+            scoring = ScoringPlan(
+                contract_metric="accuracy",
+                scorers={"primary": "accuracy", "secondary_1": "f1"},
+                labels={"primary": "accuracy", "secondary_1": "F1"},
+                directions={"primary": "maximize", "secondary_1": "maximize"},
+                negated={"primary": False, "secondary_1": False},
+            )
+            sync_baseline_docs(
+                root,
+                evaluation,
+                scoring,
+                dataset_version="abc123",
+                cv_description="5-fold CV",
+                experiment_note=Path("experiments/EXP-001 Baseline.md"),
+            )
+
+            readme = (root / "README.md").read_text(encoding="utf-8")
+            validation = (root / "docs/03_validation.md").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn(
+                "[[experiments/EXP-001 Baseline.md\\|EXP-001 Baseline]]",
+                readme,
+            )
+            self.assertIn("0.8000", readme)
+            self.assertIn("F1", validation)
+            self.assertIn("f1", validation)
+            self.assertNotIn("\nold\n", readme)
+
+    def test_key_results_include_controlled_experiment_links(self) -> None:
+        experiments = pd.DataFrame(
+            [
+                {
+                    "experiment_id": "EXP-002",
+                    "title": "New feature",
+                    "note": "experiments/EXP-002 New feature.md",
+                    "primary_metric": "accuracy",
+                    "candidate_score": 0.81,
+                    "improvement": 0.01,
+                    "decision": "adopt",
+                }
+            ]
+        )
+        block = build_key_results_block(
+            baseline_metric="accuracy",
+            baseline_score=0.8,
+            baseline_note=Path("experiments/EXP-001 Baseline.md"),
+            experiments=experiments,
+        )
+        self.assertIn("EXP-001 Baseline.md", block)
+        self.assertIn("EXP-002 New feature.md", block)
+        self.assertIn("+0.0100", block)
+        self.assertIn("adopt", block)
+
+    def test_secondary_metrics_empty_state_points_to_config(self) -> None:
+        scoring = ScoringPlan(
+            contract_metric="accuracy",
+            scorers={"primary": "accuracy"},
+            labels={"primary": "accuracy"},
+            directions={"primary": "maximize"},
+            negated={"primary": False},
+        )
+        self.assertIn(
+            "BASELINE", build_secondary_metrics_block(scoring)
+        )
+        self.assertIn(
+            "secondary_scorers", build_secondary_metrics_block(scoring)
+        )
+
+    def test_modeling_report_audit_finds_missing_artifact_and_decision_drift(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "experiments").mkdir()
+            note = root / "experiments/EXP-002 Test.md"
+            note.write_text(
+                "---\n"
+                "decision: iterate\n"
+                "---\n\n"
+                "<!-- auto:experiment-report:start -->\n"
+                "[[artifacts/experiments/test/metadata.json]]\n"
+                "<!-- auto:experiment-report:end -->\n",
+                encoding="utf-8",
+            )
+            pd.DataFrame(
+                [
+                    {
+                        "experiment_id": "EXP-002",
+                        "note": "experiments/EXP-002 Test.md",
+                        "decision": "pending",
+                    }
+                ]
+            ).to_csv(root / "experiments/results.csv", index=False)
+
+            issues = modeling_tools.audit_modeling_report(root)
+
+            self.assertTrue(any("missing artifacts/" in issue for issue in issues))
+            self.assertTrue(any("card decision 'iterate'" in issue for issue in issues))
 
 
 @unittest.skipUnless(SKLEARN_AVAILABLE, "scikit-learn is not installed")
@@ -350,9 +633,15 @@ class BaselinePipelineTests(unittest.TestCase):
 
             self.assertEqual(set(saved.metric_figure_paths or {}), {"primary", "secondary_1"})
             self.assertTrue(all(path.exists() for path in (saved.metric_figure_paths or {}).values()))
+            self.assertTrue(
+                all(
+                    path.parent == root / "assets/experiments/EXP-001"
+                    for path in (saved.metric_figure_paths or {}).values()
+                )
+            )
             note_path = root / settings.experiment_note
             note = note_path.read_text(encoding="utf-8")
-            self.assertIn("![[artifacts/baseline/test_baseline/metric-primary-accuracy.png]]", note)
+            self.assertIn("![[assets/experiments/EXP-001/metric-primary-accuracy.png]]", note)
             self.assertIn("## Метрика: F1", note)
             self.assertIn("### Значения по folds", note)
             self.assertIn("[[artifacts/baseline/test_baseline/cv_summary.csv|cv_summary.csv]]", note)
@@ -376,19 +665,49 @@ class BaselinePipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             problem_doc(root, "accuracy")
-            settings, _, _, scoring, strategy, _, evaluation = (
+            (root / "experiments").mkdir()
+            settings, plan, prepared, scoring, strategy, _, evaluation = (
                 self.build_classification_evaluation(root)
             )
             (root / "docs/03_validation.md").write_text(
                 "Manual before\n"
+                "<!-- auto:validation-protocol:start -->\nold\n"
+                "<!-- auto:validation-protocol:end -->\n"
+                "<!-- auto:secondary-metrics:start -->\nold\n"
+                "<!-- auto:secondary-metrics:end -->\n"
                 "<!-- auto:baseline-results:start -->\nold\n"
-                "<!-- auto:baseline-results:end -->\nManual after\n",
+                "<!-- auto:baseline-results:end -->\n"
+                "<!-- auto:reproducibility:start -->\nold\n"
+                "<!-- auto:reproducibility:end -->\nManual after\n",
+                encoding="utf-8",
+            )
+            (root / "docs/04_features.md").write_text(
+                "Manual feature rationale\n"
+                "<!-- auto:model-ready-contract:start -->\nold\n"
+                "<!-- auto:model-ready-contract:end -->\n"
+                "<!-- auto:feature-registry:start -->\nold\n"
+                "<!-- auto:feature-registry:end -->\n"
+                "<!-- auto:preprocessing-contract:start -->\nold\n"
+                "<!-- auto:preprocessing-contract:end -->\n",
                 encoding="utf-8",
             )
             (root / "docs/05_experiments.md").write_text(
                 "Manual before\n"
                 "<!-- auto:current-baseline:start -->\nold\n"
-                "<!-- auto:current-baseline:end -->\nManual after\n",
+                "<!-- auto:current-baseline:end -->\n"
+                "<!-- auto:best-measured-result:start -->\nold\n"
+                "<!-- auto:best-measured-result:end -->\nManual after\n",
+                encoding="utf-8",
+            )
+            (root / "experiments/_index.md").write_text(
+                "<!-- auto:experiment-registry:start -->\nold\n"
+                "<!-- auto:experiment-registry:end -->\n",
+                encoding="utf-8",
+            )
+            (root / "README.md").write_text(
+                "Manual dashboard\n"
+                "<!-- auto:key-results:start -->\nold\n"
+                "<!-- auto:key-results:end -->\n",
                 encoding="utf-8",
             )
 
@@ -398,6 +717,9 @@ class BaselinePipelineTests(unittest.TestCase):
                 scoring,
                 dataset_version="abc123",
                 cv_description=cv_protocol_description(settings, strategy),
+                settings=settings,
+                feature_plan=plan,
+                prepared_data=prepared,
             )
 
             validation = (root / "docs/03_validation.md").read_text(
@@ -406,10 +728,16 @@ class BaselinePipelineTests(unittest.TestCase):
             experiments = (root / "docs/05_experiments.md").read_text(
                 encoding="utf-8"
             )
+            features = (root / "docs/04_features.md").read_text(encoding="utf-8")
             self.assertIn("simple_model", validation)
             self.assertIn("accuracy", validation)
+            self.assertIn("stratified_kfold", validation)
+            self.assertIn("Python", validation)
             self.assertIn("Manual before", validation)
             self.assertIn("Manual after", validation)
+            self.assertIn("numeric", features)
+            self.assertIn("standard", features)
+            self.assertIn("Manual feature rationale", features)
             self.assertIn("Baseline / simple_model", experiments)
             self.assertNotIn("\nold\n", experiments)
 

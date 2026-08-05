@@ -44,9 +44,20 @@ tags:
 
 ## Вторичные метрики
 
-| Метрика | Зачем нужна | Guardrail / порог |
-|---|---|---:|
-|  |  |  |
+<!-- auto:secondary-metrics:start -->
+
+| Метрика           | Scorer / implementation | Направление |
+| ----------------- | ----------------------- | ----------- |
+| Balanced accuracy | balanced_accuracy       | maximize    |
+| Precision         | precision               | maximize    |
+| Recall            | recall                  | maximize    |
+| F1                | f1                      | maximize    |
+| ROC-AUC           | roc_auc                 | maximize    |
+
+<!-- auto:secondary-metrics:end -->
+
+Состав и техническая реализация таблицы синхронизируются из
+`SECONDARY_SCORERS` в `src/ml_project/baseline_config.py`.
 
 ### Порог решения
 
@@ -57,31 +68,36 @@ tags:
 - фиксирован ли он при финальной оценке;
 - какие бизнес-ограничения учитываются.
 
-## Стратегия разделения
+## Исполняемый протокол validation
 
-- **Тип:** . Точно strarified!
-- **Train:** 80% размеченного `train.csv`, приблизительно 712 пассажиров. Используется для cross-validation, выбора preprocessing и сравнения моделей.
-- **Validation / CV:**Stratified k fold 5 folds, по классам Survived!
-- **Holdout test:** 20% от трейн stratified holdout!!
-- **Группирующий ключ:**
-- **Временные границы:**
-- **Gap / embargo:**
-- **Причина выбора:**задача бинарной классификации, стратификация сохраняют баланс выживших, так как наблюдается общих перекос[[02_eda#^6bbfc7]]
+<!-- auto:validation-protocol:start -->
 
-```text
-Train:      [________________]
-Validation: [___________]
-Holdout:                [____]
-```
+| Параметр                | Исполняемое значение                                |
+| ----------------------- | --------------------------------------------------- |
+| Тип задачи              | binary_classification                               |
+| Протокол                | stratified_kfold(n_splits=5, shuffle=True, seed=42) |
+| CV strategy из конфига  | stratified_kfold                                    |
+| Число folds             | 5                                                   |
+| Shuffle                 | True                                                |
+| Seed                    | 42                                                  |
+| Group column            | None                                                |
+| Time column             | None                                                |
+| Основная метрика        | accuracy                                            |
+| Основной scorer         | accuracy                                            |
+| Направление             | maximize                                            |
+| N jobs                  | -1                                                  |
+| Error score             | raise                                               |
+| Train score сохраняется | False                                               |
+| Граница preprocessing   | fit только внутри train fold sklearn Pipeline       |
 
-## Cross-validation
+<!-- auto:validation-protocol:end -->
 
-- **Число folds:**5
-- **Shuffle:**True
-- **Seed:**42
-- **Group / time constraints:**
-- **Что агрегируется:** mean accuracy по 5 folds.
-- **Как учитывается variance:**Фиксируется аккураси каждого фолда, считается среднее, стандартное отклонение, минимум и максимум
+### Обоснование стратегии
+
+- **Почему этот split имитирует будущие данные:** задача бинарной классификации, а стратификация сохраняет наблюдаемый баланс `Survived` [[02_eda#^6bbfc7]].
+- **Какие ограничения данных учтены:**
+- **Что агрегируется:** среднее, стандартное отклонение, минимум и максимум метрики по folds.
+- **Когда протокол нужно пересмотреть:**
 
 ## Holdout policy
 
@@ -98,7 +114,7 @@ Holdout:                [____]
 - [ ] Imputation, scaling, encoding и feature selection находятся внутри pipeline.
 - [ ] Временные признаки используют только прошлое.
 - [ ] Target encoding рассчитан out-of-fold.
-- [ ] Дубликаты не пересекают split.
+- [ ] Дубликаты не пер секают split.
 - [ ] Подбор threshold не использует holdout.
 - [ ] Feature store / joins соблюдают point-in-time correctness.
 
@@ -145,11 +161,26 @@ Holdout:                [____]
 
 ## Воспроизводимость
 
-- **Код split:**
-- **Файл конфигурации:**
-- **Версия окружения:**
-- **Seed policy:**
-- **Где сохраняются OOF / test predictions:**
+<!-- auto:reproducibility:start -->
+
+| Поле                    | Значение                                                      |
+| ----------------------- | ------------------------------------------------------------- |
+| Dataset version         | 7d118fef8b6c…                                                 |
+| Baseline config         | `src/ml_project/baseline_config.py`                           |
+| Dataset config          | `src/ml_project/config.py`                                    |
+| Split / evaluation code | `src/ml_project/modeling/validation.py`                       |
+| Feature code            | `src/ml_project/modeling/features.py`                         |
+| Run                     | baseline_v1                                                   |
+| Validation              | stratified_kfold(n_splits=5, shuffle=True, seed=42)           |
+| Seed policy             | RANDOM_STATE=42                                               |
+| Environment             | Python 3.12.13; numpy 2.5.1; pandas 3.0.5; scikit-learn 1.9.0 |
+| Run artifacts           | `artifacts/baseline/baseline_v1/`                             |
+| Final model             | не сохранялась                                                |
+
+<!-- auto:reproducibility:end -->
+
+- **Где сохраняются OOF / test predictions:** пока не сохраняются.
+- **Какие ручные действия нужны для полного воспроизведения:**
 
 ## Stage Gate: Validation
 

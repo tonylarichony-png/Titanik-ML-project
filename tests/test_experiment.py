@@ -47,7 +47,7 @@ def frame() -> pd.DataFrame:
 
 
 def configured_baseline():
-    settings = baseline_tools.settings_from_module(baseline_config)
+    settings = baseline_config.BASELINE
     return replace(
         settings,
         task_type="binary_classification",
@@ -68,7 +68,10 @@ def configured_baseline():
 
 
 def configured_experiment(**changes: object):
-    settings = experiment_tools.settings_from_module(experiment_config)
+    settings = experiment_tools.load_experiment(
+        experiment_config.EXPERIMENT_MODULE,
+        reload_module=False,
+    ).settings
     defaults = {
         "experiment_id": "EXP-002",
         "experiment_title": "Regularization test",
@@ -76,6 +79,8 @@ def configured_experiment(**changes: object):
         "hypothesis": "Regularization improves validation accuracy",
         "change_description": "Change only logistic C",
         "success_criterion": "Accuracy improvement is positive",
+        "primary_improvement_min": 0.005,
+        "metric_guardrails": {},
         "reference_model": "baseline_reference",
         "primary_candidate": "candidate",
         "decision": "pending",
@@ -96,8 +101,177 @@ def configured_experiment(**changes: object):
     return settings
 
 
+class ExperimentDocumentSyncTests(unittest.TestCase):
+    def test_registry_refreshes_readme_with_link_and_delta(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "docs").mkdir()
+            (root / "experiments").mkdir()
+            (root / "docs/05_experiments.md").write_text(
+                "<!-- auto:latest-experiment:start -->\nold\n"
+                "<!-- auto:latest-experiment:end -->\n"
+                "<!-- auto:experiment-leaderboard:start -->\nold\n"
+                "<!-- auto:experiment-leaderboard:end -->\n"
+                "<!-- auto:best-measured-result:start -->\nold\n"
+                "<!-- auto:best-measured-result:end -->\n",
+                encoding="utf-8",
+            )
+            (root / "experiments/_index.md").write_text(
+                "<!-- auto:experiment-registry:start -->\nold\n"
+                "<!-- auto:experiment-registry:end -->\n",
+                encoding="utf-8",
+            )
+            (root / "README.md").write_text(
+                "<!-- auto:key-results:start -->\nold\n"
+                "<!-- auto:key-results:end -->\n",
+                encoding="utf-8",
+            )
+            scoring = baseline_tools.ScoringPlan(
+                contract_metric="accuracy",
+                scorers={"primary": "accuracy"},
+                labels={"primary": "accuracy"},
+                directions={"primary": "maximize"},
+                negated={"primary": False},
+            )
+            evaluation = baseline_tools.CVEvaluation(
+                fold_scores=pd.DataFrame(
+                    [
+                        {
+                            "model": model,
+                            "split": "validation",
+                            "fold": fold,
+                            "metric_key": "primary",
+                            "metric": "accuracy",
+                            "direction": "maximize",
+                            "value": value,
+                        }
+                        for model, values in (
+                            ("baseline_reference", (0.79, 0.81)),
+                            ("candidate", (0.80, 0.82)),
+                        )
+                        for fold, value in enumerate(values, start=1)
+                    ]
+                ),
+                summary=pd.DataFrame(
+                    [
+                        {
+                            "model": "baseline_reference",
+                            "split": "validation",
+                            "metric_key": "primary",
+                            "metric": "accuracy",
+                            "direction": "maximize",
+                            "mean": 0.8,
+                            "std": 0.02,
+                            "min": 0.78,
+                            "max": 0.82,
+                            "folds": 5,
+                        },
+                        {
+                            "model": "candidate",
+                            "split": "validation",
+                            "metric_key": "primary",
+                            "metric": "accuracy",
+                            "direction": "maximize",
+                            "mean": 0.81,
+                            "std": 0.01,
+                            "min": 0.8,
+                            "max": 0.82,
+                            "folds": 5,
+                        },
+                    ]
+                ),
+                raw_results={},
+            )
+            experiment_tools.sync_experiment_docs(
+                root,
+                configured_experiment(),
+                evaluation,
+                scoring,
+                dataset_version="abc123",
+                baseline_settings=configured_baseline(),
+            )
+
+            readme = (root / "README.md").read_text(encoding="utf-8")
+            self.assertIn("EXP-001 Baseline.md", readme)
+            self.assertIn("EXP-002 Regularization.md", readme)
+            self.assertIn("+0.0100", readme)
+            self.assertIn("pending", readme)
+            self.assertIn("Criteria", (root / "docs/05_experiments.md").read_text(encoding="utf-8"))
+
+            run_dir = root / "artifacts/experiments/exp_002_v1"
+            saved = baseline_tools.SavedBaselineRun(
+                run_dir=run_dir,
+                fold_scores_path=run_dir / "cv_fold_scores.csv",
+                summary_path=run_dir / "cv_summary.csv",
+                metadata_path=run_dir / "metadata.json",
+                metric_figure_paths={
+                    "primary": (
+                        root
+                        / "assets/experiments/EXP-002/"
+                        "metric-primary-accuracy.png"
+                    )
+                },
+            )
+            experiment = configured_experiment()
+            experiment_tools.sync_experiment_note(
+                root,
+                experiment,
+                evaluation,
+                scoring,
+                saved,
+                dataset_version="abc123",
+                cv_description="2-fold CV",
+            )
+            note = (root / experiment.experiment_note).read_text(encoding="utf-8")
+            self.assertIn(
+                "![[assets/experiments/EXP-002/metric-primary-accuracy.png]]",
+                note,
+            )
+            self.assertIn(
+                "[[artifacts/experiments/exp_002_v1/cv_summary.csv"
+                "|cv_summary.csv]]",
+                note,
+            )
+
+
 @unittest.skipUnless(DEPENDENCIES_AVAILABLE, "modeling dependencies unavailable")
 class ExperimentTests(unittest.TestCase):
+    def test_versioned_experiment_module_has_source_provenance(self) -> None:
+        definition = experiment_tools.load_experiment(
+            experiment_config.EXPERIMENT_MODULE
+        )
+        self.assertEqual(definition.settings.experiment_id, "EXP-002")
+        self.assertTrue(definition.source_path.is_file())
+        self.assertEqual(len(definition.source_sha256), 64)
+
+    def test_structured_success_criteria_are_evaluated(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "docs").mkdir()
+            (root / "docs/00_problem.md").write_text(
+                "(primary_metric:: accuracy)\n", encoding="utf-8"
+            )
+            (
+                _,
+                experiment,
+                _,
+                _,
+                scoring,
+                _,
+                _,
+                evaluation,
+            ) = self.build_run(root)
+            criteria = experiment_tools.success_criteria_report(
+                evaluation,
+                scoring,
+                replace(
+                    experiment,
+                    primary_improvement_min=-1.0,
+                    metric_guardrails={"F1": -1.0},
+                ),
+            )
+            self.assertEqual(criteria["passed"].tolist(), [True, True])
+
     def build_run(self, root: Path):
         baseline = configured_baseline()
         experiment = configured_experiment()
@@ -174,7 +348,20 @@ class ExperimentTests(unittest.TestCase):
                 "<!-- auto:latest-experiment:end -->\n"
                 "<!-- auto:experiment-leaderboard:start -->\nold\n"
                 "<!-- auto:experiment-leaderboard:end -->\n"
+                "<!-- auto:best-measured-result:start -->\nold\n"
+                "<!-- auto:best-measured-result:end -->\n"
                 "Manual after\n",
+                encoding="utf-8",
+            )
+            (root / "experiments/_index.md").write_text(
+                "<!-- auto:experiment-registry:start -->\nold\n"
+                "<!-- auto:experiment-registry:end -->\n",
+                encoding="utf-8",
+            )
+            (root / "README.md").write_text(
+                "Manual dashboard\n"
+                "<!-- auto:key-results:start -->\nold\n"
+                "<!-- auto:key-results:end -->\n",
                 encoding="utf-8",
             )
             (
@@ -216,14 +403,18 @@ class ExperimentTests(unittest.TestCase):
                 evaluation,
                 scoring,
                 dataset_version="abc123",
+                baseline_settings=baseline,
             )
 
             note = (root / experiment.experiment_note).read_text(encoding="utf-8")
             docs = (root / "docs/05_experiments.md").read_text(encoding="utf-8")
             registry = pd.read_csv(root / experiment.results_registry)
-            self.assertIn("![[artifacts/experiments/exp_002_v1/metric-primary-accuracy.png]]", note)
+            readme = (root / "README.md").read_text(encoding="utf-8")
+            self.assertIn("![[assets/experiments/EXP-002/metric-primary-accuracy.png]]", note)
             self.assertIn("Δ к reference", note)
             self.assertIn("EXP-002", docs)
+            self.assertIn("EXP-001 Baseline.md", readme)
+            self.assertIn("EXP-002", readme)
             self.assertIn("Manual before", docs)
             self.assertEqual(len(registry), 1)
 
@@ -262,6 +453,7 @@ class ExperimentTests(unittest.TestCase):
                 evaluation,
                 scoring,
                 dataset_version="abc123",
+                baseline_settings=baseline,
             )
             self.assertEqual(len(pd.read_csv(root / experiment.results_registry)), 1)
 

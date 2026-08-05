@@ -33,6 +33,10 @@ artifacts/baseline/<RUN_NAME>/
 
 [[notebooks/04_experiment.ipynb]] сохраняет каждый запуск в
 `artifacts/experiments/<RUN_NAME>/`. Конфигурация identity, гипотезы, решения и
-write-флагов находится в `src/ml_project/experiment_config.py`. PNG и полные
-CSV встраиваются ссылками в карточку эксперимента, а компактные таблицы
-записываются непосредственно в Markdown.
+write-флагов находится в `src/ml_project/experiment_config.py`. Полные CSV
+встраиваются ссылками в карточку эксперимента, а компактные таблицы записываются
+непосредственно в Markdown.
+
+Графики метрик baseline и экспериментов хранятся отдельно в отслеживаемом Git
+каталоге `assets/experiments/<EXP-ID>/`, чтобы ссылки в карточках работали после
+клонирования проекта.

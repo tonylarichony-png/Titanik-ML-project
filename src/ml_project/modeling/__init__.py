@@ -1,58 +1,70 @@
-"""Compatibility facade for the reusable modeling package.
+"""Public modeling API shared by baseline and controlled experiments."""
 
-Existing notebooks and project code may continue importing
-``ml_project.baseline``. New code can import the same public API from
-``ml_project.modeling`` while the implementation remains split by concern.
-"""
-
-from .modeling import (
+from .artifacts import (
+    build_metric_figures,
+    metric_figure_filename,
+    save_baseline_run,
+)
+from .contracts import (
     BaselineSettings,
     CVEvaluation,
+    ExperimentData,
+    ExperimentDefinition,
+    ExperimentSettings,
     FeaturePlan,
     PreparedData,
     SavedBaselineRun,
     ScoringPlan,
-    audit_modeling_report,
-    build_baseline_experiment_report,
-    build_best_result_block,
-    build_current_baseline_block,
-    build_cv_splitter,
+)
+from .estimators import (
     build_dummy_estimator,
+    build_model_pipeline,
+    build_simple_estimator,
+    resolved_model_label,
+    resolved_model_name,
+)
+from .features import (
+    build_tabular_preprocessor,
+    prepare_training_data,
+    preprocessing_report,
+    resolve_feature_plan,
+    validate_inference_schema,
+)
+from .report_audit import audit_modeling_report
+from .report_blocks import (
+    build_best_result_block,
     build_experiment_registry_block,
     build_feature_registry_block,
     build_key_results_block,
-    build_metric_figures,
-    build_model_pipeline,
     build_model_ready_block,
     build_preprocessing_block,
     build_reproducibility_block,
     build_secondary_metrics_block,
-    build_simple_estimator,
-    build_tabular_preprocessor,
-    build_validation_baseline_block,
     build_validation_protocol_block,
-    cv_protocol_description,
-    evaluate_models_cv,
-    metric_figure_filename,
-    prepare_training_data,
-    preprocessing_report,
-    read_inline_field,
-    resolve_cv_strategy,
-    resolve_feature_plan,
-    resolve_scoring_plan,
-    resolved_model_label,
-    resolved_model_name,
-    save_baseline_run,
-    settings_report,
+)
+from .reporting import (
+    build_baseline_experiment_report,
+    build_current_baseline_block,
+    build_validation_baseline_block,
     sync_baseline_docs,
     sync_baseline_experiment_note,
-    validate_baseline_settings,
-    validate_inference_schema,
+)
+from .settings import settings_report, validate_baseline_settings
+from .validation import (
+    build_cv_splitter,
+    cv_protocol_description,
+    evaluate_models_cv,
+    read_inline_field,
+    resolve_cv_strategy,
+    resolve_scoring_plan,
 )
 
 __all__ = [
     "BaselineSettings",
     "CVEvaluation",
+    "ExperimentData",
+    "ExperimentDefinition",
+    "ExperimentSettings",
     "FeaturePlan",
     "PreparedData",
     "SavedBaselineRun",

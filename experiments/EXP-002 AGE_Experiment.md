@@ -4,7 +4,7 @@ type: experiment
 experiment_type: hypothesis-test
 status: completed
 created: 2026-08-02
-hypothesis: " if я заполню возраст более точно, then accuracy должен повысится, because потому что как минимум станет возможно отделить детей и стариков, у которых есть большая зависимость с survived"
+hypothesis: "Если заполнить Age медианой по Title и Pclass внутри каждого train-fold, то accuracy повысится, потому что эти признаки несут информацию о возрасте."
 primary_metric: "accuracy"
 decision: pending
 ---
@@ -20,22 +20,31 @@ decision: pending
 
 ## Контракт эксперимента
 
-| Поле              | Значение                                                                                                                                                                                   |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Эксперимент       | EXP-002 — Заполнение пропусков Age с помощью "title" and "Pclass"                                                                                                                          |
-| Гипотеза          |  if я заполню возраст более точно, then accuracy должен повысится, because потому что как минимум станет возможно отделить детей и стариков, у которых есть большая зависимость с survived |
-| Одно изменение    | новый способ заполнения пустот                                                                                                                                                             |
-| Критерий успеха   | accuracy                                                                                                                                                                                   |
-| Решение           | pending                                                                                                                                                                                    |
-| Run               | exp_002_v1                                                                                                                                                                                 |
-| Версия данных     | 7d118fef8b6c…                                                                                                                                                                              |
-| Validation        | stratified_kfold(n_splits=5, shuffle=True, seed=42)                                                                                                                                        |
-| Reference         | baseline_reference                                                                                                                                                                         |
-| Основной кандидат | candidate                                                                                                                                                                                  |
-| Основная метрика  | accuracy                                                                                                                                                                                   |
+| Поле                | Значение                                                                                                                                             |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Эксперимент         | EXP-002 — Заполнение пропусков Age с помощью "Title" и "Pclass"                                                                                      |
+| Гипотеза            | Если заполнить Age медианой по Title и Pclass внутри каждого train-fold, то accuracy повысится, потому что эти признаки несут информацию о возрасте. |
+| Одно изменение      | Новый fold-safe способ заполнения пропусков Age                                                                                                      |
+| Критерий успеха     | Legacy pre-registration: accuracy должна вырасти; минимальный эффект и guardrails до первого запуска не были зафиксированы.                          |
+| Формальные критерии | passed                                                                                                                                               |
+| Решение             | pending                                                                                                                                              |
+| Run                 | exp_002_v1                                                                                                                                           |
+| Версия данных       | 7d118fef8b6c…                                                                                                                                        |
+| Validation          | stratified_kfold(n_splits=5, shuffle=True, seed=42)                                                                                                  |
+| Reference           | baseline_reference                                                                                                                                   |
+| Основной кандидат   | candidate                                                                                                                                            |
+| Основная метрика    | accuracy                                                                                                                                             |
+| Код эксперимента    | [[src/ml_project/experiments/exp_002_age_imputation.py\|ml_project.experiments.exp_002_age_imputation]]                                              |
+| Hash кода           | 347270751bbf…                                                                                                                                        |
 
 > [!note] Как читать Δ
 > Положительное значение означает улучшение — и для maximize, и для minimize-метрик.
+
+## Проверка pre-registered criteria
+
+| Роль    | Метрика  | Наблюдаемый Δ | Минимальный Δ | Пройден |
+| ------- | -------- | ------------: | ------------: | ------: |
+| primary | accuracy |        0.0067 |        0.0000 |    True |
 
 ## Сравнение всех метрик
 
@@ -56,7 +65,7 @@ decision: pending
 
 ## Метрика: accuracy
 
-![[artifacts/experiments/exp_002_v1/metric-primary-accuracy.png]]
+![[assets/experiments/EXP-002/metric-primary-accuracy.png]]
 
 ### Сводка
 
@@ -77,7 +86,7 @@ decision: pending
 
 ## Метрика: Balanced accuracy
 
-![[artifacts/experiments/exp_002_v1/metric-secondary_1-balanced-accuracy.png]]
+![[assets/experiments/EXP-002/metric-secondary_1-balanced-accuracy.png]]
 
 ### Сводка
 
@@ -98,7 +107,7 @@ decision: pending
 
 ## Метрика: Precision
 
-![[artifacts/experiments/exp_002_v1/metric-secondary_2-precision.png]]
+![[assets/experiments/EXP-002/metric-secondary_2-precision.png]]
 
 ### Сводка
 
@@ -119,7 +128,7 @@ decision: pending
 
 ## Метрика: Recall
 
-![[artifacts/experiments/exp_002_v1/metric-secondary_3-recall.png]]
+![[assets/experiments/EXP-002/metric-secondary_3-recall.png]]
 
 ### Сводка
 
@@ -140,7 +149,7 @@ decision: pending
 
 ## Метрика: F1
 
-![[artifacts/experiments/exp_002_v1/metric-secondary_4-f1.png]]
+![[assets/experiments/EXP-002/metric-secondary_4-f1.png]]
 
 ### Сводка
 
@@ -161,7 +170,7 @@ decision: pending
 
 ## Метрика: ROC-AUC
 
-![[artifacts/experiments/exp_002_v1/metric-secondary_5-roc-auc.png]]
+![[assets/experiments/EXP-002/metric-secondary_5-roc-auc.png]]
 
 ### Сводка
 
@@ -190,13 +199,15 @@ decision: pending
 
 ## Анализ результата — заполнить вручную
 
-- **Что произошло:**
-- **Подтвердилась ли гипотеза:**
-- **Почему мог получиться такой результат:**
-- **Стабильность по folds / seeds:**
-- **Ограничения и возможный leakage:**
+- **Что произошло:** Замена пропусков Age повысила среднюю аккураси на +0.0067
+- **Подтвердилась ли гипотеза:** Гипотеза подтвердилась, хоть улучшение и не значительное, но вторичные метрики доже выросли, кроме рекалл
+- **Почему мог получиться такой результат:** Потому что Титул и класс содержат некую информацию о возрасте, и результат будет явно ближе чем просто медиана по возрасту
 
-## Решение — заполнить вручную
+## Обоснование решения
 
-- **Outcome:** adopt / reject / iterate / inconclusive.
-- **Следующий шаг:**
+> Машинный source of truth для `decision` находится в
+> `src/ml_project/experiments/exp_002_age_imputation.py`. После выбора решения
+> карточка и registry синхронизируются из этого модуля.
+
+- **Предварительный вывод до формализации критерия:** iterate.
+- **Следующий шаг:**Принимаем это изменение!

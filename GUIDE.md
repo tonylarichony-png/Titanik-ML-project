@@ -55,8 +55,11 @@ Project Dashboard ([[README.md]])
 | Реализация метрики, split и протокол проверки | [[docs/03_validation.md]] |
 | Model-ready выборка, preprocessing и признаки | [[docs/04_features.md]] |
 | Параметры первого baseline | `src/ml_project/baseline_config.py` |
+| Общее ML-ядро baseline и экспериментов | `src/ml_project/modeling/` |
 | Расчёт первого baseline | [[notebooks/03_baseline.ipynb]] |
-| Контракт одного эксперимента | `src/ml_project/experiment_config.py` |
+| Контракт и реализация одного эксперимента | `src/ml_project/experiments/exp_xxx_*.py` |
+| Выбранный для запуска эксперимент | `src/ml_project/experiment_config.py` |
+| Создание следующего эксперимента | `.\new-experiment.cmd` |
 | Контролируемое сравнение, графики и фиксация | [[notebooks/04_experiment.ipynb]] |
 | Сводка результатов | [[docs/05_experiments.md]] |
 | Системные ошибки модели | [[docs/06_error_analysis.md]] |
@@ -72,14 +75,48 @@ Project Dashboard ([[README.md]])
 > [!important] Граница этапов Data → EDA → Features
 > В [[docs/01_data.md]] хранится общая информация о файлах, источниках, структуре и версиях. В [[docs/02_eda.md]] исследуются значения, target, пропуски, дубликаты, распределения и причины проблем. Окончательные фильтры, исключения и preprocessing реализуются и документируются в [[docs/04_features.md]] после фиксации [[docs/03_validation.md|validation-протокола]].
 
+### Архитектура моделирования
+
+`src/ml_project/modeling/` — общее исполняемое ядро для baseline и всех
+контролируемых экспериментов:
+
+| Модуль | Ответственность |
+|---|---|
+| `contracts.py` | Настройки и типизированные контракты данных, метрик и результатов |
+| `settings.py` | Проверка и компактное отображение готового объекта `BASELINE` |
+| `features.py` | Feature plan, model-ready данные и preprocessing |
+| `validation.py` | Scorers, CV protocol и одинаковая оценка reference/candidate |
+| `estimators.py` | Dummy/simple estimators и сборка sklearn Pipeline |
+| `artifacts.py` | CSV, metadata, snapshot окружения, модели и Git-отслеживаемые графики |
+| `report_blocks.py` | Чистые генераторы Markdown-блоков для Validation, Features, README и реестров |
+| `reporting.py` | Карточка baseline и оркестрация синхронизации всех отчётов |
+| `report_audit.py` | Проверка auto-маркеров, локальных ссылок и согласованности решений |
+
+`src/ml_project/baseline.py` остаётся тонким совместимым фасадом. Старые
+импорты продолжают работать, но notebooks используют публичный API
+`ml_project.modeling`.
+
+Контролируемые эксперименты масштабируются отдельно от общего ядра:
+
+| Модуль | Ответственность |
+|---|---|
+| `experiments/exp_xxx_*.py` | Неизменяемая pre-registration, критерии успеха и ровно одно кандидатное изменение |
+| `experiment_config.py` | Одна строка-селектор активного модуля; экспериментальная логика здесь не хранится |
+| `experiment.py` | Загрузка контракта, одинаковая оценка, provenance, артефакты и синхронизация отчётов |
+| `experiment_scaffold.py` | Создание следующего модуля без копирования notebook |
+
 ### Синхронизация notebook → docs
 
 - [[notebooks/01_data.ipynb]] обновляет автоматические блоки в [[docs/01_data.md]].
 - Перед синхронизацией `01_data` печатает готовую заготовку `FIELD_DESCRIPTIONS` для `src/ml_project/config.py`: найденные столбцы добавляются автоматически, но файл конфигурации не перезаписывается.
 - [[notebooks/02_eda.ipynb]] обновляет фактический профиль в [[docs/02_eda.md]].
 - В `02_eda_hypotheses` сохранение выполняется только при явном `SAVE_FINDING = True`: карточка может содержать график, одну или несколько Markdown-таблиц либо оба типа артефактов. Большие таблицы полностью сохраняются как CSV в `assets/eda/`, а ссылка на карточку автоматически появляется в [[docs/02_eda.md#Сохранённые EDA-наблюдения]]. Идеи для модельной проверки переносите в [[hypotheses/_index.md]].
-- [[notebooks/03_baseline.ipynb]] читает metric из [[docs/00_problem.md]], data contract из `config.py`, а CV/model-параметры из `baseline_config.py`. При `SYNC_DOCS = True` он обновляет только baseline-блоки в [[docs/03_validation.md]] и [[docs/05_experiments.md]]. CSV, metadata и final model сохраняются только отдельными явными флагами.
-- [[notebooks/04_experiment.ipynb]] автоматически пересчитывает baseline reference и пользовательские кандидаты на одинаковых folds. Пользователь заполняет pre-registration и две экспериментальные зоны; графики всех метрик, fold-таблицы, карточка `EXP-xxx`, `experiments/results.csv` и leaderboard формируются автоматически.
+- [[notebooks/03_baseline.ipynb]] напрямую использует готовый объект `baseline_config.BASELINE`: скрытой сборки настроек через `modeling_tools` нет. Metric берётся из [[docs/00_problem.md]], а data contract — из `config.py`. При `BASELINE.sync_docs=True` notebook обновляет исполняемый validation contract, secondary metrics, baseline и воспроизводимость в [[docs/03_validation.md]], model-ready состав и preprocessing в [[docs/04_features.md]], current/best measured result в [[docs/05_experiments.md]], реестр карточек и ключевые результаты в [[README.md]]. CSV, metadata и final model сохраняются только отдельными явными полями `BASELINE`.
+- [[notebooks/04_experiment.ipynb]] читает из `experiment_config.py` только имя активного модуля, а из самого модуля — типизированный объект `EXPERIMENT` и две функции: подготовку кандидатных данных и сборку моделей. Notebook не копируется и не редактируется между EXP-002, EXP-003 и следующими запусками.
+- [[notebooks/04_experiment.ipynb]] автоматически пересчитывает baseline reference и кандидатов на одинаковых folds. Pre-registration, минимальное улучшение основной метрики, допустимые просадки вторичных метрик и решение хранятся в модуле эксперимента. Графики всех метрик, fold-таблицы, карточка `EXP-xxx`, `experiments/results.csv`, leaderboard, лучший измеренный результат, реестр и ключевые результаты [[README.md]] формируются автоматически.
+- Metadata и реестр фиксируют полный hash данных, путь и hash Python-модуля эксперимента, а metadata дополнительно фиксирует hash baseline-конфигурации. Это связывает измеренный результат не только с параметрами, но и с реально исполненным кодом.
+- Решение (`pending`, `adopt`, `reject`, `iterate`, `inconclusive`) меняется только в `EXPERIMENT.decision`. Карточка и реестр получают его автоматически; свободный текст вывода в карточке не считается вторым источником решения.
+- Финальная ячейка modeling notebook запускает проверку целостности: она сообщает об отсутствующих `assets/artifacts`, повреждённых auto-маркерах и несовпадающих experiment decisions. Проверка ничего не исправляет сама.
 - Перед EDA распределите каждый столбец train, кроме target, ровно в одну группу `FEATURE_GROUPS`: `numeric`, `count`, `categorical`, `ordinal`, `text`, `datetime`, `identifier` или `ignored`. Числовой отчёт использует `numeric + count`, категориальный — `categorical + ordinal`.
 - После редактирования `src/ml_project/config.py` финальная ячейка `01_data` сама перечитывает конфиг через `importlib.reload`, пересоздаёт каталог и обновляет Markdown — перезапуск kernel не требуется.
 - Запись выполняется только явной финальной ячейкой notebook.
@@ -200,7 +237,7 @@ issues/ISSUE-001 Короткое название.md
 
 1. Завершить EDA-рекомендации и зафиксировать [[docs/03_validation.md|validation-протокол]].
 2. В `src/ml_project/config.py` заполнить target, key и `FEATURE_GROUPS`.
-3. В `src/ml_project/baseline_config.py` выбрать тип задачи, CV и preprocessing.
+3. В объекте `BASELINE` файла `src/ml_project/baseline_config.py` выбрать тип задачи, CV, preprocessing и действия записи.
 4. Запустить [[notebooks/03_baseline.ipynb]] сверху вниз и сравнить `dummy` с простой моделью.
 5. После проверки результата включить нужные write-флаги, создать карточку `EXP-xxx Baseline` и обновить [[README.md]].
 
@@ -216,12 +253,17 @@ issues/ISSUE-001 Короткое название.md
 
 ### Новый эксперимент
 
-1. Создать заметку в `experiments`.
-2. Вставить шаблон `experiment`.
-3. Связать с гипотезой и [[docs/03_validation.md]].
-4. До запуска заполнить setup, версии, seed и критерий успеха.
-5. После запуска заполнить результаты, артефакты, вывод и решение.
-6. Обновить [[docs/05_experiments.md]] и dashboard, если изменился лучший результат.
+1. Из корня проекта выполнить `.\new-experiment.cmd`. Launcher автоматически предложит следующий свободный `EXP-xxx`, попросит название, техническое имя, минимальный Δ и необязательные guardrails, затем покажет preview перед созданием.
+2. В новом файле `src/ml_project/experiments/exp_003_short_slug.py` до запуска заполнить `EXPERIMENT`: гипотезу, единственное изменение, ожидаемый эффект, `primary_improvement_min` и при необходимости `metric_guardrails`.
+3. Реализовать только две функции модуля: `prepare_candidate_data(...)` и `build_candidate_models(...)`. Все обучаемые преобразования должны оставаться внутри sklearn Pipeline, чтобы обучаться отдельно на каждом fold.
+4. Перезапустить kernel и выполнить [[notebooks/04_experiment.ipynb]] сверху вниз. Общий notebook сам создаст карточку, графики, таблицы, metadata и обновит сводные документы.
+5. Интерпретировать результат и изменить только `EXPERIMENT.decision` на `adopt`, `reject`, `iterate` или `inconclusive`; затем повторно выполнить notebook для синхронизации решения.
+6. Для EXP-004 повторить с новой командой scaffold. Старые модули не переписывать: они являются версионируемой спецификацией уже измеренных запусков.
+
+Если эксперимент меняет только гиперпараметр или estimator, функция подготовки
+может вернуть входные данные без изменений. Если меняются признаки, обучаемое
+заполнение пропусков, encoding или selection, их реализация должна быть частью
+candidate Pipeline, а не заранее преобразованного полного train.
 
 ### Важное решение
 
@@ -299,7 +341,7 @@ issues/ISSUE-001 Короткое название.md
 - [ ] Определены target, объект и момент предсказания.
 - [ ] Зафиксирована версия исходных данных.
 - [ ] Выбрана стратегия split и holdout.
-- [ ] Заполнен `src/ml_project/baseline_config.py`.
+- [ ] Заполнен объект `BASELINE` в `src/ml_project/baseline_config.py`.
 - [ ] Посчитан простой baseline.
 - [ ] Создана первая гипотеза.
 - [ ] Создан первый воспроизводимый эксперимент.

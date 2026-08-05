@@ -2,21 +2,26 @@
 
 from __future__ import annotations
 
+import copy
+import hashlib
+import importlib
 import json
 import re
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
-from types import ModuleType
 from typing import Any, Mapping
 
 import numpy as np
 import pandas as pd
 
-from . import baseline as baseline_tools
-from .baseline import (
+from . import modeling as modeling_tools
+from .modeling import (
     BaselineSettings,
     CVEvaluation,
+    ExperimentData,
+    ExperimentDefinition,
+    ExperimentSettings,
     FeaturePlan,
     PreparedData,
     SavedBaselineRun,
@@ -26,56 +31,50 @@ from .docsync import MarkdownDocument, dataframe_to_markdown
 
 
 DECISIONS = {"pending", "adopt", "reject", "iterate", "inconclusive"}
+EXPERIMENT_MODULE_PREFIX = "ml_project.experiments."
 
 
-@dataclass(frozen=True)
-class ExperimentSettings:
-    experiment_id: str
-    experiment_title: str
-    experiment_note: Path
-    hypothesis: str
-    change_description: str
-    success_criterion: str
-    reference_model: str
-    primary_candidate: str
-    experiment_parameters: Mapping[str, Any]
-    decision: str
-    run_name: str
-    artifact_dir: Path
-    results_registry: Path
-    save_artifacts: bool
-    save_metric_figures: bool
-    metric_figure_dpi: int
-    save_final_model: bool
-    sync_experiment_note: bool
-    sync_docs: bool
-    allow_overwrite: bool
+def load_experiment(
+    module_name: str,
+    *,
+    reload_module: bool = True,
+) -> ExperimentDefinition:
+    """Load one versioned experiment module and capture its source hash."""
 
-
-def settings_from_module(module: ModuleType) -> ExperimentSettings:
-    """Reload the editable experiment config without cached values."""
-
-    return ExperimentSettings(
-        experiment_id=str(getattr(module, "EXPERIMENT_ID")),
-        experiment_title=str(getattr(module, "EXPERIMENT_TITLE")),
-        experiment_note=Path(getattr(module, "EXPERIMENT_NOTE")),
-        hypothesis=str(getattr(module, "HYPOTHESIS")),
-        change_description=str(getattr(module, "CHANGE_DESCRIPTION")),
-        success_criterion=str(getattr(module, "SUCCESS_CRITERION")),
-        reference_model=str(getattr(module, "REFERENCE_MODEL")),
-        primary_candidate=str(getattr(module, "PRIMARY_CANDIDATE")),
-        experiment_parameters=dict(getattr(module, "EXPERIMENT_PARAMETERS")),
-        decision=str(getattr(module, "DECISION")).lower(),
-        run_name=str(getattr(module, "RUN_NAME")),
-        artifact_dir=Path(getattr(module, "ARTIFACT_DIR")),
-        results_registry=Path(getattr(module, "RESULTS_REGISTRY")),
-        save_artifacts=bool(getattr(module, "SAVE_ARTIFACTS")),
-        save_metric_figures=bool(getattr(module, "SAVE_METRIC_FIGURES")),
-        metric_figure_dpi=int(getattr(module, "METRIC_FIGURE_DPI")),
-        save_final_model=bool(getattr(module, "SAVE_FINAL_MODEL")),
-        sync_experiment_note=bool(getattr(module, "SYNC_EXPERIMENT_NOTE")),
-        sync_docs=bool(getattr(module, "SYNC_DOCS")),
-        allow_overwrite=bool(getattr(module, "ALLOW_OVERWRITE")),
+    if not module_name.startswith(EXPERIMENT_MODULE_PREFIX):
+        raise ValueError(
+            "EXPERIMENT_MODULE must start with "
+            f"{EXPERIMENT_MODULE_PREFIX!r}"
+        )
+    module = importlib.import_module(module_name)
+    if reload_module:
+        module = importlib.reload(module)
+    source_value = getattr(module, "__file__", None)
+    if not source_value:
+        raise ValueError(f"Experiment module has no source file: {module_name}")
+    source_path = Path(source_value).resolve()
+    if source_path.suffix.lower() != ".py":
+        raise ValueError(
+            f"Experiment module must resolve to a .py source file: {source_path}"
+        )
+    settings = getattr(module, "EXPERIMENT", None)
+    prepare_data = getattr(module, "prepare_candidate_data", None)
+    build_models = getattr(module, "build_candidate_models", None)
+    if not isinstance(settings, ExperimentSettings):
+        raise TypeError(
+            f"{module_name}.EXPERIMENT must be an ExperimentSettings object"
+        )
+    if not callable(prepare_data):
+        raise TypeError(f"{module_name}.prepare_candidate_data must be callable")
+    if not callable(build_models):
+        raise TypeError(f"{module_name}.build_candidate_models must be callable")
+    return ExperimentDefinition(
+        module_name=module_name,
+        source_path=source_path,
+        source_sha256=hashlib.sha256(source_path.read_bytes()).hexdigest(),
+        settings=settings,
+        prepare_data=prepare_data,
+        build_models=build_models,
     )
 
 
@@ -83,61 +82,128 @@ def validate_settings(settings: ExperimentSettings) -> None:
     errors: list[str] = []
     name_pattern = r"[A-Za-z0-9][A-Za-z0-9._-]*"
     if not re.fullmatch(name_pattern, settings.experiment_id):
-        errors.append("EXPERIMENT_ID contains unsupported characters")
+        errors.append("EXPERIMENT.experiment_id contains unsupported characters")
     if not re.fullmatch(name_pattern, settings.run_name):
-        errors.append("RUN_NAME contains unsupported characters")
+        errors.append("EXPERIMENT.run_name contains unsupported characters")
     for label, value in (
-        ("EXPERIMENT_TITLE", settings.experiment_title),
-        ("HYPOTHESIS", settings.hypothesis),
-        ("CHANGE_DESCRIPTION", settings.change_description),
-        ("SUCCESS_CRITERION", settings.success_criterion),
-        ("REFERENCE_MODEL", settings.reference_model),
-        ("PRIMARY_CANDIDATE", settings.primary_candidate),
+        ("experiment_title", settings.experiment_title),
+        ("hypothesis", settings.hypothesis),
+        ("change_description", settings.change_description),
+        ("success_criterion", settings.success_criterion),
+        ("reference_model", settings.reference_model),
+        ("primary_candidate", settings.primary_candidate),
     ):
         if not value.strip() or "CHANGE ME" in value.upper():
-            errors.append(f"Fill {label} before running the experiment")
+            errors.append(f"Fill EXPERIMENT.{label} before running the experiment")
+    if not np.isfinite(settings.primary_improvement_min):
+        errors.append("EXPERIMENT.primary_improvement_min must be finite")
+    for metric, threshold in settings.metric_guardrails.items():
+        if not str(metric).strip():
+            errors.append("EXPERIMENT.metric_guardrails contains an empty metric")
+        if not np.isfinite(threshold):
+            errors.append(
+                f"EXPERIMENT.metric_guardrails[{metric!r}] must be finite"
+            )
     if settings.reference_model == settings.primary_candidate:
-        errors.append("REFERENCE_MODEL and PRIMARY_CANDIDATE must be different")
+        errors.append(
+            "EXPERIMENT.reference_model and EXPERIMENT.primary_candidate "
+            "must be different"
+        )
     if settings.decision not in DECISIONS:
-        errors.append("DECISION must be one of: " + ", ".join(sorted(DECISIONS)))
+        errors.append(
+            "EXPERIMENT.decision must be one of: "
+            + ", ".join(sorted(DECISIONS))
+        )
     for label, path, suffix in (
-        ("EXPERIMENT_NOTE", settings.experiment_note, ".md"),
-        ("RESULTS_REGISTRY", settings.results_registry, ".csv"),
+        ("experiment_note", settings.experiment_note, ".md"),
+        ("results_registry", settings.results_registry, ".csv"),
     ):
         if path.is_absolute():
-            errors.append(f"{label} must be relative to the project root")
+            errors.append(f"EXPERIMENT.{label} must be relative to the project root")
         if path.suffix.lower() != suffix:
-            errors.append(f"{label} must end with {suffix}")
+            errors.append(f"EXPERIMENT.{label} must end with {suffix}")
     if settings.artifact_dir.is_absolute():
-        errors.append("ARTIFACT_DIR must be relative to the project root")
+        errors.append("EXPERIMENT.artifact_dir must be relative to the project root")
     if settings.metric_figure_dpi < 72:
-        errors.append("METRIC_FIGURE_DPI must be at least 72")
+        errors.append("EXPERIMENT.metric_figure_dpi must be at least 72")
     if errors:
         raise ValueError(
-            "Invalid src/ml_project/experiment_config.py:\n"
+            "Invalid selected experiment module:\n"
             + "\n".join(f"- {error}" for error in errors)
         )
 
 
 def settings_report(settings: ExperimentSettings) -> pd.DataFrame:
     rows = [
-        ("identity", "EXPERIMENT_ID", settings.experiment_id),
-        ("identity", "EXPERIMENT_TITLE", settings.experiment_title),
-        ("pre-registration", "HYPOTHESIS", settings.hypothesis),
-        ("pre-registration", "CHANGE_DESCRIPTION", settings.change_description),
-        ("pre-registration", "SUCCESS_CRITERION", settings.success_criterion),
-        ("comparison", "REFERENCE_MODEL", settings.reference_model),
-        ("comparison", "PRIMARY_CANDIDATE", settings.primary_candidate),
-        ("comparison", "DECISION", settings.decision),
-        ("write", "RUN_NAME", settings.run_name),
-        ("write", "SAVE_ARTIFACTS", settings.save_artifacts),
-        ("write", "SAVE_METRIC_FIGURES", settings.save_metric_figures),
-        ("write", "SAVE_FINAL_MODEL", settings.save_final_model),
-        ("write", "SYNC_EXPERIMENT_NOTE", settings.sync_experiment_note),
-        ("write", "SYNC_DOCS", settings.sync_docs),
-        ("write", "ALLOW_OVERWRITE", settings.allow_overwrite),
+        ("identity", "experiment_id", settings.experiment_id),
+        ("identity", "experiment_title", settings.experiment_title),
+        ("pre-registration", "hypothesis", settings.hypothesis),
+        ("pre-registration", "change_description", settings.change_description),
+        ("pre-registration", "success_criterion", settings.success_criterion),
+        (
+            "pre-registration",
+            "primary_improvement_min",
+            settings.primary_improvement_min,
+        ),
+        (
+            "pre-registration",
+            "metric_guardrails",
+            settings.metric_guardrails or "none",
+        ),
+        ("comparison", "reference_model", settings.reference_model),
+        ("comparison", "primary_candidate", settings.primary_candidate),
+        ("comparison", "decision", settings.decision),
+        ("write", "run_name", settings.run_name),
+        ("write", "save_artifacts", settings.save_artifacts),
+        ("write", "save_metric_figures", settings.save_metric_figures),
+        ("write", "save_final_model", settings.save_final_model),
+        ("write", "sync_experiment_note", settings.sync_experiment_note),
+        ("write", "sync_docs", settings.sync_docs),
+        ("write", "allow_overwrite", settings.allow_overwrite),
     ]
     return pd.DataFrame(rows, columns=["section", "parameter", "value"])
+
+
+def prepare_experiment_candidate(
+    definition: ExperimentDefinition,
+    train: pd.DataFrame,
+    feature_groups: Mapping[str, Any],
+    baseline_settings: BaselineSettings,
+) -> ExperimentData:
+    """Run the experiment-owned data hook and validate its public contract."""
+
+    candidate_data = definition.prepare_data(
+        train.copy(deep=True),
+        copy.deepcopy(feature_groups),
+        baseline_settings,
+    )
+    if not isinstance(candidate_data, ExperimentData):
+        raise TypeError(
+            f"{definition.module_name}.prepare_candidate_data must return "
+            "ExperimentData"
+        )
+    return candidate_data
+
+
+def build_experiment_candidates(
+    definition: ExperimentDefinition,
+    preprocessor: Any,
+    candidate_settings: BaselineSettings,
+) -> dict[str, Any]:
+    """Run the experiment-owned model hook and normalize its mapping."""
+
+    models = definition.build_models(
+        preprocessor,
+        candidate_settings,
+        definition.settings,
+    )
+    if not isinstance(models, Mapping):
+        raise TypeError(
+            f"{definition.module_name}.build_candidate_models must return a mapping"
+        )
+    normalized = dict(models)
+    validate_model_contract(normalized, definition.settings)
+    return normalized
 
 
 def prepare_experiment_data(
@@ -190,10 +256,13 @@ def validate_model_contract(
             "experiment cell before continuing."
         )
     if settings.reference_model in candidate_models:
-        raise ValueError("candidate_models must not overwrite REFERENCE_MODEL")
+        raise ValueError(
+            "candidate_models must not overwrite EXPERIMENT.reference_model"
+        )
     if settings.primary_candidate not in candidate_models:
         raise ValueError(
-            f"PRIMARY_CANDIDATE={settings.primary_candidate!r} is absent from "
+            f"EXPERIMENT.primary_candidate={settings.primary_candidate!r} "
+            "is absent from "
             "candidate_models"
         )
 
@@ -223,6 +292,62 @@ def comparison_summary(
         lambda row: f"{row['mean']:.4f} ± {row['std']:.4f}", axis=1
     )
     return result
+
+
+def success_criteria_report(
+    evaluation: CVEvaluation,
+    scoring: ScoringPlan,
+    settings: ExperimentSettings,
+) -> pd.DataFrame:
+    """Evaluate pre-registered primary and guardrail delta thresholds."""
+
+    comparison = comparison_summary(
+        evaluation,
+        scoring,
+        reference_model=settings.reference_model,
+    )
+    candidate = comparison[
+        comparison["model"].eq(settings.primary_candidate)
+    ].copy()
+    lookup: dict[str, pd.Series] = {}
+    for _, row in candidate.iterrows():
+        lookup[str(row["metric_key"]).casefold()] = row
+        lookup[str(row["metric"]).casefold()] = row
+
+    primary = lookup.get("primary")
+    if primary is None:
+        raise ValueError("Primary candidate has no primary metric result")
+    rows = [
+        {
+            "role": "primary",
+            "metric": primary["metric"],
+            "observed_improvement": float(primary["improvement"]),
+            "minimum_improvement": float(settings.primary_improvement_min),
+            "passed": bool(
+                float(primary["improvement"])
+                >= float(settings.primary_improvement_min)
+            ),
+        }
+    ]
+    for metric, threshold in settings.metric_guardrails.items():
+        record = lookup.get(str(metric).casefold())
+        if record is None:
+            available = sorted(
+                {str(row["metric"]) for _, row in candidate.iterrows()}
+            )
+            raise ValueError(
+                f"Unknown metric guardrail {metric!r}; available: {available}"
+            )
+        rows.append(
+            {
+                "role": "guardrail",
+                "metric": record["metric"],
+                "observed_improvement": float(record["improvement"]),
+                "minimum_improvement": float(threshold),
+                "passed": bool(float(record["improvement"]) >= float(threshold)),
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def _effective_baseline_settings(
@@ -259,6 +384,7 @@ def save_experiment_run(
     models: Mapping[str, Any],
     data: PreparedData,
     metric_figures: Mapping[str, Any] | None = None,
+    definition: ExperimentDefinition | None = None,
 ) -> SavedBaselineRun:
     """Save generic experiment outputs using the proven baseline artifact layer."""
 
@@ -267,7 +393,7 @@ def save_experiment_run(
         experiment_settings,
     )
     effective = _effective_baseline_settings(baseline_settings, experiment_settings)
-    saved = baseline_tools.save_baseline_run(
+    saved = modeling_tools.save_baseline_run(
         project_root,
         effective,
         evaluation,
@@ -280,12 +406,15 @@ def save_experiment_run(
         metric_figures=metric_figures,
     )
     metadata = json.loads(saved.metadata_path.read_text(encoding="utf-8"))
+    criteria = success_criteria_report(evaluation, scoring, experiment_settings)
     metadata.update(
         {
             "run_kind": "controlled_experiment",
             "hypothesis": experiment_settings.hypothesis,
             "change_description": experiment_settings.change_description,
             "success_criterion": experiment_settings.success_criterion,
+            "success_criteria": criteria.to_dict(orient="records"),
+            "success_criteria_passed": bool(criteria["passed"].all()),
             "reference_model": experiment_settings.reference_model,
             "primary_candidate": experiment_settings.primary_candidate,
             "evaluated_models": list(models),
@@ -293,6 +422,23 @@ def save_experiment_run(
             "decision": experiment_settings.decision,
         }
     )
+    if definition is not None:
+        metadata.update(
+            {
+                "implementation_module": definition.module_name,
+                "implementation_path": _vault_relative(
+                    project_root, definition.source_path
+                ),
+                "implementation_sha256": definition.source_sha256,
+            }
+        )
+    baseline_config_path = (
+        Path(project_root).resolve() / "src/ml_project/baseline_config.py"
+    )
+    if baseline_config_path.exists():
+        metadata["baseline_config_sha256"] = hashlib.sha256(
+            baseline_config_path.read_bytes()
+        ).hexdigest()
     saved.metadata_path.write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2, default=str) + "\n",
         encoding="utf-8",
@@ -309,6 +455,10 @@ def _vault_relative(project_root: Path, path: Path) -> str:
         raise ValueError(f"Path resolves outside project root: {path}") from error
 
 
+def _short_version(value: str) -> str:
+    return value if len(value) <= 16 else value[:12] + "…"
+
+
 def build_experiment_report(
     project_root: Path,
     settings: ExperimentSettings,
@@ -318,26 +468,38 @@ def build_experiment_report(
     *,
     dataset_version: str,
     cv_description: str,
+    definition: ExperimentDefinition | None = None,
 ) -> str:
     comparison = comparison_summary(
         evaluation, scoring, reference_model=settings.reference_model
     )
-    overview = pd.DataFrame(
-        [
-            ("Эксперимент", f"{settings.experiment_id} — {settings.experiment_title}"),
-            ("Гипотеза", settings.hypothesis),
-            ("Одно изменение", settings.change_description),
-            ("Критерий успеха", settings.success_criterion),
-            ("Решение", settings.decision),
-            ("Run", settings.run_name),
-            ("Версия данных", dataset_version),
-            ("Validation", cv_description),
-            ("Reference", settings.reference_model),
-            ("Основной кандидат", settings.primary_candidate),
-            ("Основная метрика", scoring.contract_metric),
-        ],
-        columns=["Поле", "Значение"],
-    )
+    criteria = success_criteria_report(evaluation, scoring, settings)
+    overview_rows = [
+        ("Эксперимент", f"{settings.experiment_id} — {settings.experiment_title}"),
+        ("Гипотеза", settings.hypothesis),
+        ("Одно изменение", settings.change_description),
+        ("Критерий успеха", settings.success_criterion),
+        (
+            "Формальные критерии",
+            "passed" if bool(criteria["passed"].all()) else "failed",
+        ),
+        ("Решение", settings.decision),
+        ("Run", settings.run_name),
+        ("Версия данных", _short_version(dataset_version)),
+        ("Validation", cv_description),
+        ("Reference", settings.reference_model),
+        ("Основной кандидат", settings.primary_candidate),
+        ("Основная метрика", scoring.contract_metric),
+    ]
+    if definition is not None:
+        implementation = _vault_relative(project_root, definition.source_path)
+        overview_rows.extend(
+            [
+                ("Код эксперимента", f"[[{implementation}|{definition.module_name}]]"),
+                ("Hash кода", definition.source_sha256[:12] + "…"),
+            ]
+        )
+    overview = pd.DataFrame(overview_rows, columns=["Поле", "Значение"])
     compact = comparison[
         ["model", "metric", "direction", "mean ± std", "reference_mean", "improvement"]
     ].rename(
@@ -352,6 +514,19 @@ def build_experiment_report(
     sections = [
         "## Контракт эксперимента\n\n" + dataframe_to_markdown(overview),
         "> [!note] Как читать Δ\n> Положительное значение означает улучшение — и для maximize, и для minimize-метрик.",
+        "## Проверка pre-registered criteria\n\n"
+        + dataframe_to_markdown(
+            criteria.rename(
+                columns={
+                    "role": "Роль",
+                    "metric": "Метрика",
+                    "observed_improvement": "Наблюдаемый Δ",
+                    "minimum_improvement": "Минимальный Δ",
+                    "passed": "Пройден",
+                }
+            ),
+            float_digits=4,
+        ),
         "## Сравнение всех метрик\n\n" + dataframe_to_markdown(compact, float_digits=4),
     ]
     fold_scores = evaluation.fold_scores[evaluation.fold_scores["split"] == "validation"]
@@ -423,6 +598,7 @@ def sync_experiment_note(
     *,
     dataset_version: str,
     cv_description: str,
+    definition: ExperimentDefinition | None = None,
 ) -> list[str]:
     root = Path(project_root).resolve()
     note_path = (root / settings.experiment_note).resolve()
@@ -454,8 +630,10 @@ def sync_experiment_note(
             "- **Почему мог получиться такой результат:**\n"
             "- **Стабильность по folds / seeds:**\n"
             "- **Ограничения и возможный leakage:**\n\n"
-            "## Решение — заполнить вручную\n\n"
-            "- **Outcome:** adopt / reject / iterate / inconclusive.\n"
+            "## Обоснование решения — заполнить вручную\n\n"
+            "> Машинный source of truth для decision находится в модуле "
+            "эксперимента; карточка и registry синхронизируются из него.\n\n"
+            "- **Почему выбрано это решение:**\n"
             "- **Следующий шаг:**\n",
             encoding="utf-8",
         )
@@ -471,16 +649,19 @@ def sync_experiment_note(
     report = build_experiment_report(
         root, settings, evaluation, scoring, saved,
         dataset_version=dataset_version, cv_description=cv_description,
+        definition=definition,
     )
     return MarkdownDocument(note_path).update_blocks({"experiment-report": report})
 
 
 def _registry_row(
+    project_root: Path,
     settings: ExperimentSettings,
     evaluation: CVEvaluation,
     scoring: ScoringPlan,
     *,
     dataset_version: str,
+    definition: ExperimentDefinition | None = None,
 ) -> dict[str, Any]:
     comparison = comparison_summary(
         evaluation, scoring, reference_model=settings.reference_model
@@ -492,7 +673,15 @@ def _registry_row(
     if row.empty:
         raise ValueError("Primary candidate has no primary metric result")
     record = row.iloc[0]
-    return {
+    reference_record = evaluation.primary_summary()
+    reference_record = reference_record[
+        reference_record["model"].eq(settings.reference_model)
+    ]
+    if reference_record.empty:
+        raise ValueError("Reference model has no primary metric result")
+    reference_primary = reference_record.iloc[0]
+    criteria = success_criteria_report(evaluation, scoring, settings)
+    result = {
         "experiment_id": settings.experiment_id,
         "title": settings.experiment_title,
         "note": settings.experiment_note.as_posix(),
@@ -504,10 +693,30 @@ def _registry_row(
         "primary_metric": scoring.contract_metric,
         "direction": record["direction"],
         "reference_score": float(record["reference_mean"]),
+        "reference_std": float(reference_primary["std"]),
         "candidate_score": float(record["mean"]),
+        "candidate_std": float(record["std"]),
         "improvement": float(record["improvement"]),
+        "criteria_passed": bool(criteria["passed"].all()),
+        "primary_improvement_min": float(settings.primary_improvement_min),
+        "metric_guardrails": json.dumps(
+            dict(settings.metric_guardrails),
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
         "decision": settings.decision,
     }
+    if definition is not None:
+        result.update(
+            {
+                "implementation_module": definition.module_name,
+                "implementation_path": _vault_relative(
+                    project_root, definition.source_path
+                ),
+                "implementation_sha256": definition.source_sha256,
+            }
+        )
+    return result
 
 
 def sync_experiment_docs(
@@ -517,15 +726,22 @@ def sync_experiment_docs(
     scoring: ScoringPlan,
     *,
     dataset_version: str,
+    baseline_settings: BaselineSettings | None = None,
+    definition: ExperimentDefinition | None = None,
 ) -> dict[str, Any]:
-    """Upsert the registry and regenerate latest/leaderboard blocks in docs/05."""
+    """Upsert the registry and refresh experiment and README leaderboards."""
 
     root = Path(project_root).resolve()
     registry_path = (root / settings.results_registry).resolve()
     _vault_relative(root, registry_path)
     registry_path.parent.mkdir(parents=True, exist_ok=True)
     row = _registry_row(
-        settings, evaluation, scoring, dataset_version=dataset_version
+        root,
+        settings,
+        evaluation,
+        scoring,
+        dataset_version=dataset_version,
+        definition=definition,
     )
     if registry_path.exists():
         registry = pd.read_csv(registry_path)
@@ -549,6 +765,10 @@ def sync_experiment_docs(
             ("Reference", f"{row['reference_score']:.4f}"),
             ("Кандидат", f"{row['candidate_score']:.4f}"),
             ("Δ к reference", f"{row['improvement']:+.4f}"),
+            (
+                "Формальные критерии",
+                "passed" if bool(row["criteria_passed"]) else "failed",
+            ),
             ("Решение", row["decision"]),
         ],
         columns=["Поле", "Значение"],
@@ -558,32 +778,92 @@ def sync_experiment_docs(
         lambda item: f"[[{item['note']}|{item['experiment_id']}]]", axis=1
     )
     leaderboard = leaderboard[
-        ["Experiment", "hypothesis", "change", "primary_metric", "reference_score", "candidate_score", "improvement", "decision"]
+        [
+            "Experiment",
+            "hypothesis",
+            "change",
+            "primary_metric",
+            "reference_score",
+            "candidate_score",
+            "improvement",
+            "criteria_passed",
+            "decision",
+        ]
     ].rename(
         columns={
             "hypothesis": "Hypothesis", "change": "Change",
             "primary_metric": "Metric", "reference_score": "Reference",
             "candidate_score": "Result", "improvement": "Δ",
+            "criteria_passed": "Criteria",
             "decision": "Decision",
         }
+    )
+    baseline_note = (
+        baseline_settings.experiment_note
+        if baseline_settings is not None
+        else Path("experiments/EXP-001 Baseline.md")
+    )
+    best_measured = modeling_tools.build_best_result_block(
+        baseline_metric=str(row["primary_metric"]),
+        baseline_score=float(row["reference_score"]),
+        baseline_std=float(row["reference_std"]),
+        baseline_direction=str(row["direction"]),
+        baseline_note=baseline_note,
+        experiments=registry,
     )
     blocks = MarkdownDocument(root / "docs/05_experiments.md").update_blocks(
         {
             "latest-experiment": dataframe_to_markdown(latest, float_digits=4),
             "experiment-leaderboard": dataframe_to_markdown(leaderboard, float_digits=4),
+            "best-measured-result": best_measured,
         }
     )
-    return {"registry": settings.results_registry.as_posix(), "blocks": blocks}
+    registry_blocks = MarkdownDocument(root / "experiments/_index.md").update_blocks(
+        {
+            "experiment-registry": modeling_tools.build_experiment_registry_block(
+                baseline_note,
+                registry,
+                baseline_run=(
+                    baseline_settings.run_name
+                    if baseline_settings is not None
+                    else "baseline"
+                ),
+                baseline_metric=str(row["primary_metric"]),
+                baseline_score=float(row["reference_score"]),
+            )
+        }
+    )
+    readme_blocks = MarkdownDocument(root / "README.md").update_blocks(
+        {
+            "key-results": modeling_tools.build_key_results_block(
+                baseline_metric=str(row["primary_metric"]),
+                baseline_score=float(row["reference_score"]),
+                baseline_note=baseline_note,
+                experiments=registry,
+            )
+        }
+    )
+    return {
+        "registry": settings.results_registry.as_posix(),
+        "blocks": blocks,
+        "registry_blocks": registry_blocks,
+        "readme_blocks": readme_blocks,
+    }
 
 
 __all__ = [
+    "ExperimentData",
+    "ExperimentDefinition",
     "ExperimentSettings",
+    "build_experiment_candidates",
     "build_experiment_report",
     "comparison_summary",
+    "load_experiment",
+    "prepare_experiment_candidate",
     "prepare_experiment_data",
     "save_experiment_run",
-    "settings_from_module",
     "settings_report",
+    "success_criteria_report",
     "sync_experiment_docs",
     "sync_experiment_note",
     "validate_model_contract",

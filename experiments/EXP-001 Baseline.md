@@ -42,7 +42,7 @@ status: completed
 
 ## Метрика: accuracy
 
-![[artifacts/baseline/baseline_v1/metric-primary-accuracy.png]]
+![[assets/experiments/EXP-001/metric-primary-accuracy.png]]
 
 ### Сводка по моделям
 
@@ -63,7 +63,7 @@ status: completed
 
 ## Метрика: Balanced accuracy
 
-![[artifacts/baseline/baseline_v1/metric-secondary_1-balanced-accuracy.png]]
+![[assets/experiments/EXP-001/metric-secondary_1-balanced-accuracy.png]]
 
 ### Сводка по моделям
 
@@ -84,7 +84,7 @@ status: completed
 
 ## Метрика: Precision
 
-![[artifacts/baseline/baseline_v1/metric-secondary_2-precision.png]]
+![[assets/experiments/EXP-001/metric-secondary_2-precision.png]]
 
 ### Сводка по моделям
 
@@ -105,7 +105,7 @@ status: completed
 
 ## Метрика: Recall
 
-![[artifacts/baseline/baseline_v1/metric-secondary_3-recall.png]]
+![[assets/experiments/EXP-001/metric-secondary_3-recall.png]]
 
 ### Сводка по моделям
 
@@ -126,7 +126,7 @@ status: completed
 
 ## Метрика: F1
 
-![[artifacts/baseline/baseline_v1/metric-secondary_4-f1.png]]
+![[assets/experiments/EXP-001/metric-secondary_4-f1.png]]
 
 ### Сводка по моделям
 
@@ -147,7 +147,7 @@ status: completed
 
 ## Метрика: ROC-AUC
 
-![[artifacts/baseline/baseline_v1/metric-secondary_5-roc-auc.png]]
+![[assets/experiments/EXP-001/metric-secondary_5-roc-auc.png]]
 
 ### Сводка по моделям
 
@@ -176,7 +176,7 @@ status: completed
 
 ## Анализ и выводы
 
-- Что показало сравнение с dummy:
-- Насколько результат стабилен между folds:
+- Что показало сравнение с dummy: Логистическая регрессия превосходит дамми модель на порядок !
+- Насколько результат стабилен между folds: вмеру стабилен...
 - Какие метрики расходятся и почему это важно:
-- Что проверить следующим экспериментом:
+- Что проверить следующим экспериментом:начать фиче инжениринг, заполнять пропуски смотреть результаты лог. регрессии
