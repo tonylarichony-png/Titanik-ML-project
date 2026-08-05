@@ -3,7 +3,9 @@ channels:
   - conda-forge
 dependencies:
   - python=3.12
+  - libblas=*=*openblas
   - numpy
+  - scipy
   - pandas
   - matplotlib
   - seaborn
