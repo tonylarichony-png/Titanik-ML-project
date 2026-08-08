@@ -63,6 +63,8 @@ Project Dashboard ([[README.md]])
 | Создание следующего эксперимента | `.\new-experiment.cmd` |
 | Контролируемое сравнение, графики и фиксация | [[notebooks/04_experiment.ipynb]] |
 | Разбор пути признака, importance и OOF-ошибок | [[notebooks/05_diagnostics.ipynb]] |
+| Групповой выбор семейства на лучшем feature set | [[notebooks/06_model_screening.ipynb]] |
+| Группы и стартовые гиперпараметры | `src/ml_project/model_screening_config.py` |
 | Синхронизация решений и Experiment ↔ EDA без переобучения | `sync-experiment-state.cmd` |
 | Сводка результатов | [[docs/05_experiments.md]] |
 | Системные ошибки модели | [[docs/06_error_analysis.md]] |
@@ -91,6 +93,10 @@ Project Dashboard ([[README.md]])
 | `validation.py` | Scorers, CV protocol и одинаковая оценка reference/candidate |
 | `diagnostics.py` | Путь признака по pipeline, fitted-fold importance и OOF-ошибки candidate |
 | `estimators.py` | Dummy/simple estimators и сборка sklearn Pipeline |
+| `model_groups.py` | Реестр sklearn/external estimators и preprocessing-профили групп |
+| `screening.py` | Frozen feature context, сборка одной группы и одинаковый CV-run |
+| `screening_diagnostics.py` | OOF-сравнение и агрегированная native/coefficient importance |
+| `screening_reporting.py` | Графики, локальные таблицы, MS-карточка и отдельный registry |
 | `artifacts.py` | CSV, metadata, snapshot окружения, модели и Git-отслеживаемые графики |
 | `report_blocks.py` | Чистые генераторы Markdown-блоков для Validation, Features, README и реестров |
 | `reporting.py` | Карточка baseline и оркестрация синхронизации всех отчётов |
@@ -110,6 +116,8 @@ Project Dashboard ([[README.md]])
 | `experiment_scaffold.py` | Создание следующего модуля и локального workbench |
 | `experiment_workbench.py` | Генерация безопасной notebook-first лаборатории без записи официальных результатов |
 | `notebooks/workbench/` | Игнорируемые Git черновики для разработки функции, smoke-fit и dry-run CV |
+| `model_screening_config.py` | Один читаемый конфиг групп, starter-параметров и frozen feature reference |
+| `model_screening.py` | Тонкий стабильный фасад screening API для notebook |
 
 ### Синхронизация notebook → docs
 
@@ -123,6 +131,7 @@ Project Dashboard ([[README.md]])
 - Локальный `notebooks/workbench/EXP-xxx_*.ipynb` используется до строгого runner: он загружает raw train без импорта незавершённого experiment-модуля, восстанавливает принятую родительскую pipeline, позволяет написать draft-функцию, проверяет contract, feature groups, smoke-fit reference/candidate и необязательный короткий CV. Fold-safe imputation остаётся внутри pipeline, поэтому пропуски могут быть видны в DataFrame до `fit`. Workbench ничего не синхронизирует.
 - [[notebooks/04_experiment.ipynb]] автоматически применяет data-hooks всех принятых предков, пересчитывает champion reference и candidate на одинаковых folds и не использует старый CSV как модель. Metadata и карточка фиксируют цепочку модулей с SHA-256. Гипотеза, критерии и guardrails хранятся в модуле; изменяемое после интерпретации решение хранится во frontmatter карточки. Графики, таблицы, registry, leaderboard и ключевые результаты формируются автоматически.
 - Тот же запуск сохраняет диагностику одного primary candidate: fitted-модели и validation-индексы тех же folds, transformed lineage, paired Δ, permutation/native importance и OOF-переходы ошибок. [[notebooks/05_diagnostics.ipynb]] только читает эти артефакты и ничего не переобучает.
+- [[notebooks/06_model_screening.ipynb]] восстанавливает принятый feature champion из versioned experiment-модуля, оставляет validation contract неизменным и запускает только выбранную группу. Параметры заранее видны в `model_screening_config.py`; fitted folds сразу дают ranking, paired wins/losses, OOF-сравнение и importance. Финальная ячейка пишет локальные таблицы в `artifacts/model-screening/`, Git-tracked PNG в `assets/model-screening/<MS-ID>/`, отдельную карточку и [[model-screening/_index.md|реестр]].
 - EDA-основания добавляются после запуска во frontmatter experiment-карточки: `eda_findings: ["EDA-003"]`. Команда `sync-experiment-state.cmd` проверяет существование ID, обновляет таблицы оснований и одновременно синхронизирует решение. Старое имя `sync-experiment-links.cmd` оставлено как совместимый alias. Связи и решение не меняют hash исполняемого Python-модуля.
 - Metadata и реестр фиксируют полный hash данных, путь и hash Python-модуля эксперимента, а metadata дополнительно фиксирует hash baseline-конфигурации. Это связывает измеренный результат не только с параметрами, но и с реально исполненным кодом.
 - Решение (`pending`, `adopt`, `reject`, `iterate`, `inconclusive`) меняется только в поле `decision:` frontmatter experiment-карточки. После `sync-experiment-state.cmd` оно попадает в generated-отчёт, все CSV registry и сводные документы без повторного обучения. Python-модуль после официального запуска для этого не редактируется.
@@ -285,6 +294,37 @@ parent, решение и provenance. Старое имя типа `BaselineSett
 может вернуть входные данные без изменений. Если меняются признаки, обучаемое
 заполнение пропусков, encoding или selection, их реализация должна быть частью
 candidate Pipeline, а не заранее преобразованного полного train.
+
+### Групповой screening моделей
+
+Начинайте этот этап, когда основные EDA/feature-гипотезы проверены и дальнейшие
+улучшения на исходной модели вышли на плато.
+
+1. В `model_screening_config.py` зафиксировать `feature_reference_module`
+   последнего принятого feature champion. Это замораживает всю parent-цепочку.
+2. Выбрать одну `active_group`: `classic_scaled`, `tree_bagging`,
+   `sklearn_boosting`, `external_boosting` или `native_categorical`.
+3. До запуска прочитать и при необходимости изменить `params` каждой включённой
+   модели. Внутри одного `MS-ID` параметры больше не менять.
+4. Выполнить [[notebooks/06_model_screening.ipynb]] сверху вниз. Reference и
+   кандидаты оцениваются на одинаковых folds; положительный paired Δ всегда
+   означает улучшение независимо от направления метрики.
+5. В карточке объяснить устойчивость по folds, OOF-исправления и новые ошибки,
+   затем отметить модели, которые переходят в shortlist.
+6. Для следующей группы создать новый `MS-ID`, note и `run_name`. Feature
+   reference, метрики и CV оставить прежними.
+7. После покрытия групп выбрать 2–3 разных семейства и только для них провести
+   coarse tuning. Финальный tuning выполняется позже, после точечных feature
+   ablation/retest на shortlist-моделях.
+
+Технический повтор того же запуска идемпотентен. Если изменились данные,
+feature reference, группа или параметры, сохранение под прежними `MS-ID` и
+`run_name` остановится и потребует новую идентичность запуска.
+
+`Shortlist` означает «стоит исследовать дальше», а не «новый champion». Среднее
+CV без параметров, std и paired-fold поведения недостаточно для окончательного
+выбора модели. PyTorch/DNN остаётся отдельной будущей веткой и в этот runner не
+включён.
 
 ### Важное решение
 

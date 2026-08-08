@@ -18,6 +18,9 @@ entity: experiment
 Решение меняйте только во frontmatter карточки и применяйте командой
 `.\sync-experiment-state.cmd` — Python-модуль и его hash не изменяются.
 
+Когда feature experiments завершены, следующий этап ведётся отдельно:
+[[model-screening/_index.md|групповой screening моделей]] на принятом feature set.
+
 ## Сейчас выполняется
 
 - …

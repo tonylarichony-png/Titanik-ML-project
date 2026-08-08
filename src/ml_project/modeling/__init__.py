@@ -7,14 +7,21 @@ from .artifacts import (
 )
 from .contracts import (
     BaselineSettings,
+    BuiltModelGroup,
     ModelingSettings,
     CVEvaluation,
     ExperimentData,
     ExperimentDefinition,
     ExperimentSettings,
     FeaturePlan,
+    ModelGroupSettings,
+    ModelScreeningContext,
+    ModelScreeningResult,
+    ModelScreeningSettings,
     PreparedData,
     SavedBaselineRun,
+    SavedModelScreening,
+    ScreeningModelSpec,
     ScoringPlan,
 )
 from .diagnostics import (
@@ -36,6 +43,13 @@ from .features import (
     preprocessing_report,
     resolve_feature_plan,
     validate_inference_schema,
+)
+from .model_groups import (
+    NativeCategoricalPreprocessor,
+    PREPROCESSING_PROFILES,
+    build_native_categorical_preprocessor,
+    build_screening_estimator,
+    settings_for_preprocessing_profile,
 )
 from .report_audit import audit_modeling_report
 from .report_blocks import (
@@ -72,6 +86,7 @@ from .validation import (
 
 __all__ = [
     "BaselineSettings",
+    "BuiltModelGroup",
     "ModelingSettings",
     "CVEvaluation",
     "ExperimentData",
@@ -79,8 +94,16 @@ __all__ = [
     "ExperimentDiagnostics",
     "ExperimentSettings",
     "FeaturePlan",
+    "ModelGroupSettings",
+    "ModelScreeningContext",
+    "ModelScreeningResult",
+    "ModelScreeningSettings",
+    "NativeCategoricalPreprocessor",
+    "PREPROCESSING_PROFILES",
     "PreparedData",
     "SavedBaselineRun",
+    "SavedModelScreening",
+    "ScreeningModelSpec",
     "SavedDiagnostics",
     "ScoringPlan",
     "audit_modeling_report",
@@ -94,11 +117,13 @@ __all__ = [
     "build_key_results_block",
     "build_metric_figures",
     "build_model_pipeline",
+    "build_native_categorical_preprocessor",
     "build_model_ready_block",
     "build_preprocessing_block",
     "build_reproducibility_block",
     "build_secondary_metrics_block",
     "build_simple_estimator",
+    "build_screening_estimator",
     "build_tabular_preprocessor",
     "build_validation_baseline_block",
     "build_validation_protocol_block",
@@ -117,6 +142,7 @@ __all__ = [
     "save_baseline_run",
     "save_experiment_diagnostics",
     "settings_report",
+    "settings_for_preprocessing_profile",
     "sync_baseline_docs",
     "sync_baseline_experiment_note",
     "validate_baseline_settings",

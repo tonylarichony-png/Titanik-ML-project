@@ -40,3 +40,11 @@ write-флагов находится в `src/ml_project/experiment_config.py`. 
 Графики метрик baseline и экспериментов хранятся отдельно в отслеживаемом Git
 каталоге `assets/experiments/<EXP-ID>/`, чтобы ссылки в карточках работали после
 клонирования проекта.
+
+## Групповой screening моделей
+
+[[notebooks/06_model_screening.ipynb]] пишет полные fold scores, OOF predictions,
+paired deltas, importance, параметры и metadata в
+`artifacts/model-screening/<RUN_NAME>/`. Карточка и компактный registry хранятся
+в `model-screening/`, а Git-tracked графики — в
+`assets/model-screening/<MS-ID>/`.

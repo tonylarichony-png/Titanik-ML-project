@@ -25,7 +25,8 @@ tags:
 7. Опишите model-ready выборку и preprocessing в [[docs/04_features.md]].
 8. Настройте `src/ml_project/baseline_config.py` и запустите [[notebooks/03_baseline.ipynb|первый воспроизводимый baseline]].
 9. Для каждой контролируемой проверки используйте [[#Как начать новый эксперимент|короткую инструкцию создания эксперимента]].
-10. Для нестандартных исследований и решений используйте встроенную команду Obsidian **Templates: Insert template**.
+10. Когда feature set стабилизирован, переходите к [[#Как начать групповой screening моделей|групповому screening моделей]].
+11. Для нестандартных исследований и решений используйте встроенную команду Obsidian **Templates: Insert template**.
 
 Полная инструкция: [[GUIDE.md|Как пользоваться шаблоном]].
 
@@ -85,6 +86,26 @@ tags:
 
 Подробности полей, критериев и жизненного цикла: [[GUIDE.md#Новый эксперимент|руководство по новому эксперименту]].
 
+## Как начать групповой screening моделей
+
+> [!tip] Выбор семейства после feature engineering
+> 1. В `src/ml_project/model_screening_config.py` один раз укажите
+>    `feature_reference_module` принятого feature champion.
+> 2. Выберите `active_group` и проверьте все стартовые параметры моделей в
+>    `MODEL_GROUPS`. Это screening-параметры, а не скрытый tuning.
+> 3. Выполните [[notebooks/06_model_screening.ipynb]] сверху вниз. Все модели,
+>    включая точный feature champion, получат одинаковые строки, folds и метрики.
+> 4. Разберите mean ± std, парные fold wins/losses, OOF-исправления ошибок и
+>    importance выбранной диагностической модели.
+> 5. Заполните созданную `model-screening/MS-xxx ...md` карточку. Для следующей
+>    группы задайте новый `MS-ID`, note и `run_name`, затем повторите notebook.
+> 6. После всех групп перенесите 2–3 разных семейства в coarse tuning. Победа
+>    стартовой конфигурации сама по себе не регистрирует нового champion.
+
+Старые feature-эксперименты целиком повторять для каждой модели не нужно:
+сначала сравниваются семейства на лучшем feature set, затем для shortlist
+делаются точечные ablation/retest действительно спорных признаков.
+
 ## Pipeline
 
 - [x] 0. [[docs/00_problem.md|Problem — постановка задачи]]
@@ -103,6 +124,7 @@ tags:
 
 - [[hypotheses/_index.md|Гипотезы]]
 - [[experiments/_index.md|Эксперименты]]
+- [[model-screening/_index.md|Screening моделей]]
 - [[decisions/_index.md|Решения]]
 - [[issues/_index.md|Проблемы и блокеры]]
 - [[assets/_index.md|Артефакты и графики]]

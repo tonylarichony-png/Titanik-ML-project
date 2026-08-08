@@ -260,3 +260,105 @@ class SavedBaselineRun:
     metadata_path: Path
     model_path: Path | None = None
     metric_figure_paths: Mapping[str, Path] | None = None
+
+
+@dataclass(frozen=True)
+class ScreeningModelSpec:
+    """Одна модель и её явно зафиксированные стартовые параметры."""
+
+    model_id: str
+    label: str
+    params: Mapping[str, Any] = field(default_factory=dict)
+    enabled: bool = True
+
+
+@dataclass(frozen=True)
+class ModelGroupSettings:
+    """Группа моделей, сравнимая в одном screening-прогоне."""
+
+    group_id: str
+    title: str
+    preprocessing_profile: str
+    models: tuple[ScreeningModelSpec, ...]
+    purpose: str = ""
+
+
+@dataclass(frozen=True)
+class ModelScreeningSettings:
+    """Notebook-first контракт группового выбора семейства моделей."""
+
+    screening_id: str
+    screening_title: str
+    screening_note: Path
+    feature_reference_module: str | None
+    active_group: str
+    groups: Mapping[str, ModelGroupSettings]
+    reference_model_id: str
+    diagnostic_model_id: str | None
+    shortlist_size: int
+    run_name: str
+    artifact_dir: Path
+    results_registry: Path
+    save_artifacts: bool
+    save_figures: bool
+    figure_dpi: int
+    sync_screening_note: bool
+    sync_registry: bool
+    allow_overwrite: bool
+
+
+@dataclass(frozen=True)
+class ModelScreeningContext:
+    """Замороженный feature set и pipeline-чемпион для screening."""
+
+    feature_reference_id: str
+    feature_reference_module: str | None
+    feature_reference_sha256: str | None
+    frame: pd.DataFrame
+    feature_groups: Mapping[str, Sequence[str]]
+    settings: ModelingSettings
+    plan: FeaturePlan
+    data: PreparedData
+    reference_pipeline: Any
+
+
+@dataclass(frozen=True)
+class BuiltModelGroup:
+    """Собранные pipelines одной группы до запуска cross-validation."""
+
+    group: ModelGroupSettings
+    context: ModelScreeningContext
+    effective_settings: ModelingSettings
+    models: Mapping[str, Any]
+    parameters: pd.DataFrame
+
+
+@dataclass(frozen=True)
+class ModelScreeningResult:
+    """Таблицы и fitted-fold результаты одного группового screening."""
+
+    built: BuiltModelGroup
+    scoring: ScoringPlan
+    cv_description: str
+    evaluation: CVEvaluation
+    leaderboard: pd.DataFrame
+    paired_deltas: pd.DataFrame
+    oof_predictions: pd.DataFrame
+    prediction_comparison: pd.DataFrame
+    feature_importance: pd.DataFrame
+    shortlist: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SavedModelScreening:
+    """Пути локальных таблиц и Git-tracked карточки/графиков screening."""
+
+    run_dir: Path
+    figure_dir: Path
+    note_path: Path
+    fold_scores_path: Path
+    summary_path: Path
+    leaderboard_path: Path
+    metadata_path: Path
+    registry_path: Path
+    figure_paths: Mapping[str, Path]
