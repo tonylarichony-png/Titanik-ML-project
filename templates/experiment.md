@@ -15,6 +15,8 @@ seed:
 primary_metric:
 result:
 baseline_delta:
+decision: pending
+eda_findings: []
 tags:
   - ml/experiment
 ---
@@ -136,6 +138,7 @@ tags:
 
 ## Решение
 
+- **Машинное решение:** измените `decision:` во frontmatter и запустите `sync-experiment-state.cmd`.
 - **Outcome:** adopt / reject / iterate / inconclusive.
 - **Что меняем в проекте:**
 - **Нужно ли отдельное DEC:**

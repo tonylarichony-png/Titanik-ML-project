@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import tempfile
 import unittest
@@ -40,6 +41,9 @@ class ExperimentScaffoldTests(unittest.TestCase):
             source = "".join(
                 "".join(cell["source"]) for cell in notebook["cells"]
             )
+            code_source = "".join(
+                "".join(cell["source"]) for cell in code_cells
+            )
             self.assertEqual(path.name, "EXP-003_family_size.ipynb")
             self.assertTrue(all(cell["outputs"] == [] for cell in code_cells))
             self.assertTrue(
@@ -54,6 +58,17 @@ class ExperimentScaffoldTests(unittest.TestCase):
                 source,
             )
             self.assertIn("build_reference_pipeline", source)
+            self.assertIn("initial_settings = replace(", source)
+            self.assertIn("reference_settings = parent_data.settings", source)
+            self.assertIn("candidate_settings = reference_settings", source)
+            self.assertIn("settings=candidate_settings", source)
+            self.assertIn("def prepare_candidate_data(", source)
+            self.assertIn("frame = train.copy(deep=True)", source)
+            self.assertIn("groups = copy.deepcopy(feature_groups)", source)
+            self.assertIn("feature_groups=groups", source)
+            self.assertNotIn("def draft_transform(", code_source)
+            self.assertNotIn("draft_feature_groups", code_source)
+            self.assertNotIn("result = frame.copy(deep=True)", code_source)
             self.assertIn("RUN_MODULE_SMOKE = False", source)
             self.assertNotIn("sync_experiment_docs(", source)
 
@@ -142,6 +157,36 @@ class ExperimentScaffoldTests(unittest.TestCase):
                     / "notebooks/workbench/EXP-003_family_size.ipynb"
                 ).is_file()
             )
+            module_source = (
+                package / "exp_003_family_size.py"
+            ).read_text(encoding="utf-8")
+            notebook = json.loads(
+                (
+                    root
+                    / "notebooks/workbench/EXP-003_family_size.ipynb"
+                ).read_text(encoding="utf-8")
+            )
+            notebook_source = "\n".join(
+                "".join(cell["source"])
+                for cell in notebook["cells"]
+                if cell["cell_type"] == "code"
+            )
+            module_prepare = next(
+                node
+                for node in ast.parse(module_source).body
+                if isinstance(node, ast.FunctionDef)
+                and node.name == "prepare_candidate_data"
+            )
+            notebook_prepare = next(
+                node
+                for node in ast.parse(notebook_source).body
+                if isinstance(node, ast.FunctionDef)
+                and node.name == "prepare_candidate_data"
+            )
+            self.assertEqual(
+                ast.dump(module_prepare, include_attributes=False),
+                ast.dump(notebook_prepare, include_attributes=False),
+            )
 
     def test_latest_adopted_champion_is_embedded(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -158,8 +203,17 @@ class ExperimentScaffoldTests(unittest.TestCase):
                 "EXPERIMENT = ExperimentSettings(\n"
                 '    experiment_id="EXP-002",\n'
                 '    experiment_title="Parent",\n'
-                '    decision="adopt",\n'
                 ")\n",
+                encoding="utf-8",
+            )
+            cards = root / "experiments"
+            cards.mkdir()
+            (cards / "EXP-002 Parent.md").write_text(
+                "---\n"
+                "id: EXP-002\n"
+                "decision: adopt\n"
+                "---\n\n"
+                "# EXP-002 — Parent\n",
                 encoding="utf-8",
             )
 
@@ -258,6 +312,10 @@ class ExperimentScaffoldTests(unittest.TestCase):
             self.assertIn("metric_guardrails={'Recall': -0.005}", source)
             self.assertIn("prepare_candidate_data", source)
             self.assertIn("build_candidate_models", source)
+            self.assertIn("ModelingSettings", source)
+            self.assertIn("reference_settings: ModelingSettings", source)
+            self.assertIn("candidate_settings = reference_settings", source)
+            self.assertNotIn("baseline_settings: ModelingSettings", source)
             self.assertIn(
                 module_name,
                 selector.read_text(encoding="utf-8"),

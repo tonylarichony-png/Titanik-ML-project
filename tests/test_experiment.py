@@ -190,7 +190,7 @@ class ExperimentDocumentSyncTests(unittest.TestCase):
                 evaluation,
                 scoring,
                 dataset_version="abc123",
-                baseline_settings=configured_baseline(),
+                initial_settings=configured_baseline(),
             )
 
             readme = (root / "README.md").read_text(encoding="utf-8")
@@ -498,7 +498,7 @@ class ExperimentTests(unittest.TestCase):
                 evaluation,
                 scoring,
                 dataset_version="abc123",
-                baseline_settings=baseline,
+                initial_settings=baseline,
             )
 
             note = (root / experiment.experiment_note).read_text(encoding="utf-8")
@@ -513,20 +513,20 @@ class ExperimentTests(unittest.TestCase):
             self.assertIn("Manual before", docs)
             self.assertEqual(len(registry), 1)
 
-            decided = replace(experiment, decision="adopt")
-            experiment_tools.sync_experiment_note(
-                root,
-                decided,
-                evaluation,
-                scoring,
-                saved,
-                dataset_version="abc123",
-                cv_description=description,
+            note_path = root / experiment.experiment_note
+            note_path.write_text(
+                note.replace("\ndecision: pending\n", "\ndecision: adopt\n"),
+                encoding="utf-8",
             )
+            experiment_tools.sync_experiment_state(root)
             decided_note = (root / experiment.experiment_note).read_text(
                 encoding="utf-8"
             )
             self.assertIn("\ndecision: adopt\n", decided_note)
+            self.assertEqual(
+                pd.read_csv(root / experiment.results_registry).iloc[0]["decision"],
+                "adopt",
+            )
 
             # Same run is idempotent and the registry row is upserted, not duplicated.
             experiment_tools.save_experiment_run(
@@ -548,7 +548,7 @@ class ExperimentTests(unittest.TestCase):
                 evaluation,
                 scoring,
                 dataset_version="abc123",
-                baseline_settings=baseline,
+                initial_settings=baseline,
             )
             self.assertEqual(len(pd.read_csv(root / experiment.results_registry)), 1)
 

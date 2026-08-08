@@ -7,6 +7,7 @@ Existing notebooks and project code may continue importing
 
 from .modeling import (
     BaselineSettings,
+    ModelingSettings,
     CVEvaluation,
     FeaturePlan,
     PreparedData,
@@ -47,11 +48,13 @@ from .modeling import (
     sync_baseline_docs,
     sync_baseline_experiment_note,
     validate_baseline_settings,
+    validate_modeling_settings,
     validate_inference_schema,
 )
 
 __all__ = [
     "BaselineSettings",
+    "ModelingSettings",
     "CVEvaluation",
     "FeaturePlan",
     "PreparedData",
@@ -92,5 +95,6 @@ __all__ = [
     "sync_baseline_docs",
     "sync_baseline_experiment_note",
     "validate_baseline_settings",
+    "validate_modeling_settings",
     "validate_inference_schema",
 ]

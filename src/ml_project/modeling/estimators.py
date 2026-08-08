@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from ._utils import _sklearn_import_error
-from .contracts import BaselineSettings, CLASSIFICATION_TASKS
-def build_dummy_estimator(settings: BaselineSettings) -> Any:
+from .contracts import ModelingSettings, CLASSIFICATION_TASKS
+def build_dummy_estimator(settings: ModelingSettings) -> Any:
     """Build a no-skill floor appropriate for the task."""
 
     try:
@@ -26,7 +26,7 @@ def build_dummy_estimator(settings: BaselineSettings) -> Any:
     return DummyRegressor(**params)
 
 
-def build_simple_estimator(settings: BaselineSettings) -> Any:
+def build_simple_estimator(settings: ModelingSettings) -> Any:
     """Build the intentionally simple, interpretable reference estimator."""
 
     try:
@@ -51,7 +51,7 @@ def build_simple_estimator(settings: BaselineSettings) -> Any:
     raise ValueError(f"Unsupported simple baseline model: {model_name}")
 
 
-def resolved_model_name(settings: BaselineSettings) -> str:
+def resolved_model_name(settings: ModelingSettings) -> str:
     if settings.model_name != "auto":
         return settings.model_name
     return (

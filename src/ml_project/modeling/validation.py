@@ -12,13 +12,13 @@ import pandas as pd
 
 from ._utils import _sklearn_import_error
 from .contracts import (
-    BaselineSettings,
+    ModelingSettings,
     CLASSIFICATION_TASKS,
     CVEvaluation,
     PreparedData,
     ScoringPlan,
 )
-def resolve_cv_strategy(settings: BaselineSettings) -> str:
+def resolve_cv_strategy(settings: ModelingSettings) -> str:
     """Resolve the convenient ``auto`` strategy deterministically."""
 
     if settings.cv_strategy != "auto":
@@ -31,7 +31,7 @@ def resolve_cv_strategy(settings: BaselineSettings) -> str:
 
 
 
-def build_cv_splitter(settings: BaselineSettings, y: pd.Series) -> tuple[Any, str]:
+def build_cv_splitter(settings: ModelingSettings, y: pd.Series) -> tuple[Any, str]:
     """Construct the configured sklearn splitter."""
 
     try:
@@ -64,12 +64,12 @@ def build_cv_splitter(settings: BaselineSettings, y: pd.Series) -> tuple[Any, st
         splitter = GroupKFold(n_splits=settings.n_splits)
     elif strategy == "time_series":
         splitter = TimeSeriesSplit(n_splits=settings.n_splits)
-    else:  # guarded by validate_baseline_settings
+    else:  # guarded by validate_modeling_settings
         raise ValueError(f"Unsupported CV strategy: {strategy}")
     return splitter, strategy
 
 
-def cv_protocol_description(settings: BaselineSettings, strategy: str) -> str:
+def cv_protocol_description(settings: ModelingSettings, strategy: str) -> str:
     """Create a compact protocol label for notebook and Markdown reports."""
 
     if strategy in {"group_kfold", "time_series"}:
@@ -107,7 +107,7 @@ def read_inline_field(path: Path, field: str) -> str:
 
 def resolve_scoring_plan(
     project_root: Path,
-    settings: BaselineSettings,
+    settings: ModelingSettings,
     *,
     problem_doc: Path = Path("docs/00_problem.md"),
 ) -> ScoringPlan:
@@ -139,7 +139,7 @@ def resolve_scoring_plan(
             except ValueError as error:
                 raise ValueError(
                     f"{scorer!r} is not a valid scikit-learn scorer. "
-                    "Use BASELINE.primary_scorer/secondary_scorers for the technical "
+                    "Use settings.primary_scorer/secondary_scorers for the technical "
                     "implementation while keeping the metric contract in "
                     "docs/00_problem.md."
                 ) from error
@@ -167,7 +167,7 @@ def evaluate_models_cv(
     *,
     cv: Any,
     scoring: ScoringPlan,
-    settings: BaselineSettings,
+    settings: ModelingSettings,
 ) -> CVEvaluation:
     """Evaluate every full pipeline on the same folds and scoring contract."""
 
@@ -179,6 +179,24 @@ def evaluate_models_cv(
     if not models:
         raise ValueError("At least one model pipeline is required")
 
+    if hasattr(cv, "split"):
+        split_iterator = cv.split(
+            data.X,
+            data.y,
+            groups=data.groups,
+        )
+    else:
+        split_iterator = iter(cv)
+    cv_splits = tuple(
+        (
+            np.asarray(train_indices, dtype=int),
+            np.asarray(validation_indices, dtype=int),
+        )
+        for train_indices, validation_indices in split_iterator
+    )
+    if not cv_splits:
+        raise ValueError("Cross-validation produced no folds")
+
     fold_rows: list[dict[str, Any]] = []
     raw_results: dict[str, Mapping[str, Any]] = {}
     for model_name, pipeline in models.items():
@@ -187,9 +205,10 @@ def evaluate_models_cv(
             data.X,
             data.y,
             groups=data.groups,
-            cv=cv,
+            cv=cv_splits,
             scoring=dict(scoring.scorers),
             n_jobs=settings.n_jobs,
+            return_estimator=True,
             return_train_score=settings.return_train_score,
             error_score=settings.error_score,
         )
@@ -239,6 +258,7 @@ def evaluate_models_cv(
         fold_scores=fold_scores,
         summary=summary,
         raw_results=raw_results,
+        cv_splits=cv_splits,
     )
 
 

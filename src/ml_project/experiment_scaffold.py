@@ -28,6 +28,10 @@ SLUG_PATTERN = re.compile(r"[a-z][a-z0-9_]*")
 SELECTOR_PATTERN = re.compile(
     r'(?m)^EXPERIMENT_MODULE\s*=\s*["\']([^"\']+)["\']\s*$'
 )
+CARD_ID_PATTERN = re.compile(r'(?m)^id:\s*["\']?(EXP-\d+)["\']?\s*$')
+CARD_DECISION_PATTERN = re.compile(
+    r'(?m)^decision:\s*["\']?(pending|adopt|reject|iterate|inconclusive)["\']?\s*$'
+)
 CYRILLIC_TO_LATIN = {
     "а": "a",
     "б": "b",
@@ -174,22 +178,34 @@ def _module_path(project_root: Path, module_name: str) -> Path:
     )
 
 
+def _card_decisions(project_root: Path) -> dict[str, str]:
+    decisions: dict[str, str] = {}
+    for path in sorted((Path(project_root) / "experiments").glob("EXP-*.md")):
+        text = path.read_text(encoding="utf-8")
+        id_match = CARD_ID_PATTERN.search(text)
+        decision_match = CARD_DECISION_PATTERN.search(text)
+        if id_match and decision_match:
+            decisions[id_match.group(1)] = decision_match.group(1)
+    return decisions
+
+
 def find_adopted_champion_module(project_root: Path) -> str | None:
-    """Return the latest explicitly adopted experiment module."""
+    """Return the latest module adopted in its Markdown card."""
 
     root = Path(project_root).resolve()
     package = root / "src/ml_project/experiments"
     adopted: list[tuple[int, str]] = []
+    decisions = _card_decisions(root)
     if not package.exists():
         return None
     for module_path in package.glob("exp_*.py"):
         values = _experiment_literals(
             module_path,
-            {"experiment_id", "decision"},
+            {"experiment_id"},
         )
         experiment_id = str(values.get("experiment_id", ""))
         match = re.fullmatch(r"EXP-(\d+)", experiment_id)
-        if match and values.get("decision") == "adopt":
+        if match and decisions.get(experiment_id) == "adopt":
             adopted.append(
                 (
                     int(match.group(1)),
@@ -207,12 +223,13 @@ def validate_parent_module(project_root: Path, module_name: str) -> None:
         raise FileNotFoundError(f"Parent experiment module not found: {module_path}")
     values = _experiment_literals(
         module_path,
-        {"experiment_id", "decision"},
+        {"experiment_id"},
     )
-    if values.get("decision") != "adopt":
+    experiment_id = str(values.get("experiment_id", module_name))
+    if _card_decisions(project_root).get(experiment_id) != "adopt":
         raise ValueError(
-            f"Parent {values.get('experiment_id', module_name)} must have "
-            "decision='adopt'"
+            f"Parent {experiment_id} must have decision: adopt in its "
+            "Markdown experiment card"
         )
 
 
@@ -281,6 +298,7 @@ def _module_source(
         from __future__ import annotations
 
         import copy
+        from dataclasses import replace
         from pathlib import Path
         from typing import Any, Mapping
 
@@ -288,7 +306,7 @@ def _module_source(
 
         from ml_project.experiment import build_reference_pipeline
         from ml_project.modeling import (
-            BaselineSettings,
+            ModelingSettings,
             ExperimentData,
             ExperimentSettings,
         )
@@ -313,7 +331,6 @@ def _module_source(
             experiment_parameters={{
                 # "important_parameter": "...",
             }},
-            decision="pending",
             run_name="{module_run}_v1",
             artifact_dir=Path("artifacts/experiments"),
             results_registry=Path("experiments/results.csv"),
@@ -331,32 +348,42 @@ def _module_source(
         def prepare_candidate_data(
             train: pd.DataFrame,
             feature_groups: Mapping[str, Any],
-            baseline_settings: BaselineSettings,
+            reference_settings: ModelingSettings,
         ) -> ExperimentData:
-            """Create candidate data without mutating baseline raw features."""
+            """Подготовить candidate поверх настроек baseline/чемпиона."""
 
             frame = train.copy(deep=True)
             groups = copy.deepcopy(feature_groups)
 
-            # CHANGE ME — add deterministic raw features here. Statistics learned
-            # from data must live inside a transformer in build_candidate_models.
+            # reference_settings — настройки сравниваемой модели: исходного
+            # baseline либо принятого parent-чемпиона. Не изменяйте объект
+            # напрямую: ModelingSettings immutable.
+            #
+            # Если гипотеза меняет признаки, preprocessing или estimator,
+            # создайте candidate_settings = replace(reference_settings, ...).
+            # Validation contract наследуется: его смена требует нового протокола.
+            candidate_settings = reference_settings
+
+            # CHANGE ME — создавайте здесь только детерминированные raw-признаки.
+            # Обучаемая статистика должна жить в sklearn transformer внутри
+            # build_candidate_models, чтобы fit выполнялся отдельно на fold.
 
             return ExperimentData(
                 frame=frame,
                 feature_groups=groups,
-                settings=baseline_settings,
+                settings=candidate_settings,
                 diagnostics={{}},
             )
 
 
         def build_candidate_models(
             preprocessor: Any,
-            candidate_settings: BaselineSettings,
+            candidate_settings: ModelingSettings,
             experiment_settings: ExperimentSettings,
         ) -> dict[str, Any]:
-            """Return candidates keyed by experiment_settings.primary_candidate."""
+            """Собрать candidate с подготовленными candidate_settings."""
 
-            # For a feature-only change on top of the adopted champion:
+            # Для feature-only изменения поверх принятого чемпиона:
             # candidate = build_reference_pipeline(
             #     experiment_settings.parent_experiment_module,
             #     preprocessor,

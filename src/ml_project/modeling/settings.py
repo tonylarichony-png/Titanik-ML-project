@@ -9,7 +9,7 @@ import pandas as pd
 
 from ..profiling import FEATURE_GROUP_NAMES
 from .contracts import (
-    BaselineSettings,
+    ModelingSettings,
     CLASSIFICATION_TASKS,
     SUPPORTED_CV_STRATEGIES,
     SUPPORTED_MODEL_FEATURE_GROUPS,
@@ -18,30 +18,30 @@ from .contracts import (
 )
 
 
-def validate_baseline_settings(settings: BaselineSettings) -> list[str]:
-    """Fail on unsafe/ambiguous values and return non-blocking warnings."""
+def validate_modeling_settings(settings: ModelingSettings) -> list[str]:
+    """Проверить настройки baseline, reference или candidate модели."""
 
     errors: list[str] = []
     warnings: list[str] = []
 
     if settings.task_type not in SUPPORTED_TASKS:
         errors.append(
-            "BASELINE.task_type must be one of: "
+            "settings.task_type must be one of: "
             + ", ".join(sorted(SUPPORTED_TASKS))
         )
     if settings.cv_strategy not in SUPPORTED_CV_STRATEGIES:
         errors.append(
-            "BASELINE.cv_strategy must be one of: "
+            "settings.cv_strategy must be one of: "
             + ", ".join(sorted(SUPPORTED_CV_STRATEGIES))
         )
     if settings.n_splits < 2:
-        errors.append("BASELINE.n_splits must be at least 2")
+        errors.append("settings.n_splits must be at least 2")
     if settings.n_jobs == 0:
-        errors.append("BASELINE.n_jobs cannot be 0")
+        errors.append("settings.n_jobs cannot be 0")
     if settings.cv_strategy == "group_kfold" and not settings.group_column:
-        errors.append("BASELINE.group_column is required for group_kfold")
+        errors.append("settings.group_column is required for group_kfold")
     if settings.cv_strategy == "time_series" and not settings.time_column:
-        errors.append("BASELINE.time_column is required for time_series")
+        errors.append("settings.time_column is required for time_series")
     if settings.cv_strategy == "auto":
         warnings.append(
             "CV_STRATEGY='auto' удобна для первого запуска; после описания "
@@ -56,7 +56,7 @@ def validate_baseline_settings(settings: BaselineSettings) -> list[str]:
     )
     if unknown_feature_groups:
         errors.append(
-            "Unknown BASELINE.model_feature_groups: "
+            "Unknown settings.model_feature_groups: "
             + ", ".join(unknown_feature_groups)
         )
     if unsupported_feature_groups:
@@ -76,20 +76,20 @@ def validate_baseline_settings(settings: BaselineSettings) -> list[str]:
         "most_frequent",
         "constant",
     }:
-        errors.append("Unsupported BASELINE.numeric_imputer")
+        errors.append("Unsupported settings.numeric_imputer")
     if settings.numeric_scaler not in {"standard", "robust", "minmax", "none"}:
-        errors.append("Unsupported BASELINE.numeric_scaler")
+        errors.append("Unsupported settings.numeric_scaler")
     if settings.categorical_imputer not in {"most_frequent", "constant"}:
-        errors.append("Unsupported BASELINE.categorical_imputer")
+        errors.append("Unsupported settings.categorical_imputer")
     if not 0 <= settings.column_transformer_sparse_threshold <= 1:
         errors.append(
-            "BASELINE.column_transformer_sparse_threshold must be between 0 and 1"
+            "settings.column_transformer_sparse_threshold must be between 0 and 1"
         )
 
     if settings.model_name not in {"auto", "logistic_regression", "ridge"}:
         errors.append(
-            "BASELINE.model_name must be auto, logistic_regression or ridge for the "
-            "reference baseline"
+            "settings.model_name must be auto, logistic_regression or ridge for the "
+            "reference estimator"
         )
     if (
         settings.task_type in CLASSIFICATION_TASKS
@@ -101,34 +101,39 @@ def validate_baseline_settings(settings: BaselineSettings) -> list[str]:
 
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", settings.run_name):
         errors.append(
-            "BASELINE.run_name must contain only letters, digits, dot, "
+            "settings.run_name must contain only letters, digits, dot, "
             "underscore or dash"
         )
     if settings.artifact_dir.is_absolute():
-        errors.append("BASELINE.artifact_dir must be relative to the project root")
+        errors.append("settings.artifact_dir must be relative to the project root")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", settings.experiment_id):
         errors.append(
-            "BASELINE.experiment_id must contain only letters, digits, dot, "
+            "settings.experiment_id must contain only letters, digits, dot, "
             "underscore or dash"
         )
     if not settings.experiment_title.strip():
-        errors.append("BASELINE.experiment_title cannot be empty")
+        errors.append("settings.experiment_title cannot be empty")
     if settings.experiment_note.is_absolute():
-        errors.append("BASELINE.experiment_note must be relative to the project root")
+        errors.append("settings.experiment_note must be relative to the project root")
     if settings.experiment_note.suffix.lower() != ".md":
-        errors.append("BASELINE.experiment_note must point to a Markdown (.md) file")
+        errors.append("settings.experiment_note must point to a Markdown (.md) file")
     if settings.metric_figure_dpi < 72:
-        errors.append("BASELINE.metric_figure_dpi must be at least 72")
+        errors.append("settings.metric_figure_dpi must be at least 72")
 
     if errors:
         raise ValueError(
-            "Invalid src/ml_project/baseline_config.py:\n"
+            "Invalid ModelingSettings:\n"
             + "\n".join(f"- {error}" for error in errors)
         )
     return warnings
 
 
-def settings_report(settings: BaselineSettings) -> pd.DataFrame:
+# Совместимость со старым публичным API. Новый код вызывает
+# validate_modeling_settings независимо от роли объекта.
+validate_baseline_settings = validate_modeling_settings
+
+
+def settings_report(settings: ModelingSettings) -> pd.DataFrame:
     """Compact, human-readable report of the settings that change results."""
 
     rows = [

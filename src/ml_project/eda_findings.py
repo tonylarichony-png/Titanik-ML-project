@@ -328,6 +328,10 @@ def save_eda_finding(
         f"{artifacts_markdown}\n\n"
         "## Возможная гипотеза\n\n"
         f"{hypothesis_text}\n\n"
+        "## Связанные эксперименты\n\n"
+        "<!-- auto:eda-experiment-links:start -->\n\n"
+        "> Эксперименты на основании этого наблюдения пока не зарегистрированы.\n\n"
+        "<!-- auto:eda-experiment-links:end -->\n\n"
         "## Источник\n\n"
         f"- Notebook: {source_link}\n"
     )

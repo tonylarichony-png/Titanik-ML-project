@@ -14,7 +14,7 @@ from typing import Any, Mapping
 
 from ._utils import _display_value, _json_safe, _sklearn_import_error
 from .contracts import (
-    BaselineSettings,
+    ModelingSettings,
     CVEvaluation,
     FeaturePlan,
     PreparedData,
@@ -141,7 +141,7 @@ def _metric_figure_directory(root: Path, experiment_id: str) -> Path:
         figure_dir.relative_to(figure_root)
     except ValueError as error:
         raise ValueError(
-            "BASELINE.experiment_id resolves outside the tracked metric figure "
+            "settings.experiment_id resolves outside the tracked metric figure "
             "directory"
         ) from error
     return figure_dir
@@ -161,7 +161,7 @@ def _cleanup_generated_metric_figures(figure_dir: Path) -> None:
 
 def save_baseline_run(
     project_root: Path,
-    settings: BaselineSettings,
+    settings: ModelingSettings,
     evaluation: CVEvaluation,
     plan: FeaturePlan,
     scoring: ScoringPlan,
@@ -174,7 +174,7 @@ def save_baseline_run(
 ) -> SavedBaselineRun:
     """Save local run data, tracked figures and optionally a final pipeline.
 
-    With ``BASELINE.allow_overwrite=True`` repeated execution refreshes only files owned
+    With ``settings.allow_overwrite=True`` repeated execution refreshes only files owned
     by this generator. Unknown files in run and figure directories are preserved.
     """
 
@@ -184,7 +184,7 @@ def save_baseline_run(
         base_dir.relative_to(root)
     except ValueError as error:
         raise ValueError(
-            "BASELINE.artifact_dir resolves outside the project root"
+            "settings.artifact_dir resolves outside the project root"
         ) from error
 
     run_dir = (base_dir / settings.run_name).resolve()
@@ -192,7 +192,7 @@ def save_baseline_run(
         run_dir.relative_to(base_dir)
     except ValueError as error:
         raise ValueError(
-            "BASELINE.run_name resolves outside BASELINE.artifact_dir"
+            "settings.run_name resolves outside settings.artifact_dir"
         ) from error
 
     figure_dir = (
@@ -202,8 +202,8 @@ def save_baseline_run(
     )
     if run_dir.exists() and any(run_dir.iterdir()) and not settings.allow_overwrite:
         raise FileExistsError(
-            f"Baseline run already exists: {run_dir}. Change BASELINE.run_name "
-            "or set BASELINE.allow_overwrite=True deliberately."
+            f"Modeling run already exists: {run_dir}. Change settings.run_name "
+            "or set settings.allow_overwrite=True deliberately."
         )
     if (
         figure_dir is not None
@@ -218,7 +218,7 @@ def save_baseline_run(
     ):
         raise FileExistsError(
             f"Metric figures already exist: {figure_dir}. Change "
-            "BASELINE.experiment_id or set BASELINE.allow_overwrite=True "
+            "settings.experiment_id or set settings.allow_overwrite=True "
             "deliberately."
         )
 
@@ -294,7 +294,7 @@ def save_baseline_run(
         if final_pipeline is None or data is None:
             raise ValueError(
                 "final_pipeline and data are required when "
-                "BASELINE.save_final_model=True"
+                "settings.save_final_model=True"
             )
         try:
             from joblib import dump

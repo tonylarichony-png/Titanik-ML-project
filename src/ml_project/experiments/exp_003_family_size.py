@@ -13,7 +13,7 @@ import numpy as np
 
 from ml_project.experiment import build_reference_pipeline
 from ml_project.modeling import (
-    BaselineSettings,
+    ModelingSettings,
     ExperimentData,
     ExperimentSettings,
 )
@@ -68,9 +68,14 @@ EXPERIMENT = ExperimentSettings(
 def prepare_candidate_data(
     train: pd.DataFrame,
     feature_groups: Mapping[str, Any],
-    baseline_settings: BaselineSettings,
+    reference_settings: ModelingSettings,
 ) -> ExperimentData:
-    """Create candidate data without mutating baseline raw features."""
+    """Подготовить EXP-003 поверх настроек принятого EXP-002."""
+
+    # reference_settings уже содержат рецепт чемпиона EXP-002:
+    # TitleExtractor + fold-safe заполнение Age и исходный feature plan.
+    # Ниже создаётся отдельная копия candidate_settings только с изменением
+    # EXP-003: FamilySizeGroup заменяет SibSp и Parch во входе модели.
 
     frame = train.copy(deep=True)
     groups = copy.deepcopy(feature_groups)
@@ -88,16 +93,14 @@ def prepare_candidate_data(
         "FamilySizeGroup",
     ]
 
-
     candidate_settings = replace(
-        baseline_settings,
+        reference_settings,
         exclude_features=(
-            *baseline_settings.exclude_features,
+            *reference_settings.exclude_features,
             "SibSp",
             "Parch",
         ),
     )
-
 
     return ExperimentData(
         frame=frame,
@@ -109,20 +112,20 @@ def prepare_candidate_data(
 
 def build_candidate_models(
     preprocessor: Any,
-    candidate_settings: BaselineSettings,
+    candidate_settings: ModelingSettings,
     experiment_settings: ExperimentSettings,
 ) -> dict[str, Any]:
-    """Return candidates keyed by experiment_settings.primary_candidate."""
+    """Собрать EXP-002 pipeline с новым preprocessor EXP-003."""
 
-    # Для текущего feature-only эксперимента candidate должен сохранить
-    # принятую Age-рецептуру и использовать новый candidate preprocessor:
+    # candidate_settings — настройки после единственного изменения EXP-003.
+    # build_reference_pipeline сохраняет Title/Age шаги принятого EXP-002,
+    # но подставляет preprocessor с FamilySizeGroup без SibSp и Parch.
     candidate = build_reference_pipeline(
         experiment_settings.parent_experiment_module,
         preprocessor,
         candidate_settings,
     )
     return {experiment_settings.primary_candidate: candidate}
-
 
 
 __all__ = [

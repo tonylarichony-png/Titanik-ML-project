@@ -9,7 +9,7 @@ import pandas as pd
 
 from ..docsync import MarkdownDocument, dataframe_to_markdown
 from .contracts import (
-    BaselineSettings,
+    ModelingSettings,
     CVEvaluation,
     FeaturePlan,
     PreparedData,
@@ -46,7 +46,7 @@ def _wikilink(project_root: Path, path: Path, alias: str | None = None) -> str:
 
 def build_baseline_experiment_report(
     project_root: Path,
-    settings: BaselineSettings,
+    settings: ModelingSettings,
     evaluation: CVEvaluation,
     scoring: ScoringPlan,
     saved_run: SavedBaselineRun,
@@ -146,7 +146,7 @@ def build_baseline_experiment_report(
 
 def sync_baseline_experiment_note(
     project_root: Path,
-    settings: BaselineSettings,
+    settings: ModelingSettings,
     evaluation: CVEvaluation,
     scoring: ScoringPlan,
     saved_run: SavedBaselineRun,
@@ -279,7 +279,7 @@ def sync_baseline_docs(
     cv_description: str,
     model_name: str = "simple_model",
     experiment_note: Path | None = None,
-    settings: BaselineSettings | None = None,
+    settings: ModelingSettings | None = None,
     feature_plan: FeaturePlan | None = None,
     prepared_data: PreparedData | None = None,
     saved_run: SavedBaselineRun | None = None,

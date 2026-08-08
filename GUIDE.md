@@ -50,6 +50,7 @@ Project Dashboard ([[README.md]])
 | Паспорт файлов и схемы | [[notebooks/01_data.ipynb]] |
 | Источники, схема и версии raw-данных | [[docs/01_data.md]] |
 | Первичный профиль и EDA | [[notebooks/02_eda.ipynb]] |
+| Статистический обзор выбросов без изменения данных | [[notebooks/02_eda_anomalies.ipynb]] |
 | Проверка EDA-гипотез и связей с target | [[notebooks/02_eda_hypotheses.ipynb]] |
 | Выводы EDA и рекомендации по обработке | [[docs/02_eda.md]] |
 | Реализация метрики, split и протокол проверки | [[docs/03_validation.md]] |
@@ -61,6 +62,8 @@ Project Dashboard ([[README.md]])
 | Выбранный для запуска эксперимент | `src/ml_project/experiment_config.py` |
 | Создание следующего эксперимента | `.\new-experiment.cmd` |
 | Контролируемое сравнение, графики и фиксация | [[notebooks/04_experiment.ipynb]] |
+| Разбор пути признака, importance и OOF-ошибок | [[notebooks/05_diagnostics.ipynb]] |
+| Синхронизация решений и Experiment ↔ EDA без переобучения | `sync-experiment-state.cmd` |
 | Сводка результатов | [[docs/05_experiments.md]] |
 | Системные ошибки модели | [[docs/06_error_analysis.md]] |
 | Inference, мониторинг и retraining | [[docs/07_production.md]] |
@@ -86,6 +89,7 @@ Project Dashboard ([[README.md]])
 | `settings.py` | Проверка и компактное отображение готового объекта `BASELINE` |
 | `features.py` | Feature plan, model-ready данные и preprocessing |
 | `validation.py` | Scorers, CV protocol и одинаковая оценка reference/candidate |
+| `diagnostics.py` | Путь признака по pipeline, fitted-fold importance и OOF-ошибки candidate |
 | `estimators.py` | Dummy/simple estimators и сборка sklearn Pipeline |
 | `artifacts.py` | CSV, metadata, snapshot окружения, модели и Git-отслеживаемые графики |
 | `report_blocks.py` | Чистые генераторы Markdown-блоков для Validation, Features, README и реестров |
@@ -112,13 +116,16 @@ Project Dashboard ([[README.md]])
 - [[notebooks/01_data.ipynb]] обновляет автоматические блоки в [[docs/01_data.md]].
 - Перед синхронизацией `01_data` печатает готовую заготовку `FIELD_DESCRIPTIONS` для `src/ml_project/config.py`: найденные столбцы добавляются автоматически, но файл конфигурации не перезаписывается.
 - [[notebooks/02_eda.ipynb]] обновляет фактический профиль в [[docs/02_eda.md]].
+- [[notebooks/02_eda_anomalies.ipynb]] рассчитывает границы IQR и MAD только по train, применяет их к train/inference, показывает отмеченные признаки и строки и обновляет только автоматическую сводку раздела «Пропуски, выбросы и аномалии». Он ничего не удаляет и не исправляет.
 - В `02_eda_hypotheses` сохранение выполняется только при явном `SAVE_FINDING = True`: карточка может содержать график, одну или несколько Markdown-таблиц либо оба типа артефактов. Большие таблицы полностью сохраняются как CSV в `assets/eda/`, а ссылка на карточку автоматически появляется в [[docs/02_eda.md#Сохранённые EDA-наблюдения]]. Идеи для модельной проверки переносите в [[hypotheses/_index.md]].
 - [[notebooks/03_baseline.ipynb]] напрямую использует готовый объект `baseline_config.BASELINE`: скрытой сборки настроек через `modeling_tools` нет. Metric берётся из [[docs/00_problem.md]], а data contract — из `config.py`. При `BASELINE.sync_docs=True` notebook обновляет исполняемый validation contract, secondary metrics, baseline и воспроизводимость в [[docs/03_validation.md]], model-ready состав и preprocessing в [[docs/04_features.md]], current/best measured result в [[docs/05_experiments.md]], реестр карточек и ключевые результаты в [[README.md]]. CSV, metadata и final model сохраняются только отдельными явными полями `BASELINE`.
 - [[notebooks/04_experiment.ipynb]] читает из `experiment_config.py` только имя активного модуля, а из самого модуля — типизированный объект `EXPERIMENT` и две функции: подготовку кандидатных данных и сборку моделей. `parent_experiment_module` явно связывает эксперимент с последним принятым champion; notebook не копируется между EXP-002, EXP-003 и следующими запусками.
 - Локальный `notebooks/workbench/EXP-xxx_*.ipynb` используется до строгого runner: он загружает raw train без импорта незавершённого experiment-модуля, восстанавливает принятую родительскую pipeline, позволяет написать draft-функцию, проверяет contract, feature groups, smoke-fit reference/candidate и необязательный короткий CV. Fold-safe imputation остаётся внутри pipeline, поэтому пропуски могут быть видны в DataFrame до `fit`. Workbench ничего не синхронизирует.
-- [[notebooks/04_experiment.ipynb]] автоматически применяет data-hooks всех принятых предков, пересчитывает champion reference и candidate на одинаковых folds и не использует старый CSV как модель. Metadata и карточка фиксируют цепочку модулей с SHA-256. Критерии, guardrails и решение хранятся в модуле эксперимента; графики, таблицы, registry, leaderboard и ключевые результаты формируются автоматически.
+- [[notebooks/04_experiment.ipynb]] автоматически применяет data-hooks всех принятых предков, пересчитывает champion reference и candidate на одинаковых folds и не использует старый CSV как модель. Metadata и карточка фиксируют цепочку модулей с SHA-256. Гипотеза, критерии и guardrails хранятся в модуле; изменяемое после интерпретации решение хранится во frontmatter карточки. Графики, таблицы, registry, leaderboard и ключевые результаты формируются автоматически.
+- Тот же запуск сохраняет диагностику одного primary candidate: fitted-модели и validation-индексы тех же folds, transformed lineage, paired Δ, permutation/native importance и OOF-переходы ошибок. [[notebooks/05_diagnostics.ipynb]] только читает эти артефакты и ничего не переобучает.
+- EDA-основания добавляются после запуска во frontmatter experiment-карточки: `eda_findings: ["EDA-003"]`. Команда `sync-experiment-state.cmd` проверяет существование ID, обновляет таблицы оснований и одновременно синхронизирует решение. Старое имя `sync-experiment-links.cmd` оставлено как совместимый alias. Связи и решение не меняют hash исполняемого Python-модуля.
 - Metadata и реестр фиксируют полный hash данных, путь и hash Python-модуля эксперимента, а metadata дополнительно фиксирует hash baseline-конфигурации. Это связывает измеренный результат не только с параметрами, но и с реально исполненным кодом.
-- Решение (`pending`, `adopt`, `reject`, `iterate`, `inconclusive`) меняется только в `EXPERIMENT.decision`. Карточка и реестр получают его автоматически; свободный текст вывода в карточке не считается вторым источником решения.
+- Решение (`pending`, `adopt`, `reject`, `iterate`, `inconclusive`) меняется только в поле `decision:` frontmatter experiment-карточки. После `sync-experiment-state.cmd` оно попадает в generated-отчёт, все CSV registry и сводные документы без повторного обучения. Python-модуль после официального запуска для этого не редактируется.
 - Финальная ячейка modeling notebook запускает проверку целостности: она сообщает об отсутствующих `assets/artifacts`, повреждённых auto-маркерах и несовпадающих experiment decisions. Проверка ничего не исправляет сама.
 - Перед EDA распределите каждый столбец train, кроме target, ровно в одну группу `FEATURE_GROUPS`: `numeric`, `count`, `categorical`, `ordinal`, `text`, `datetime`, `identifier` или `ignored`. Числовой отчёт использует `numeric + count`, категориальный — `categorical + ordinal`.
 - После редактирования `src/ml_project/config.py` финальная ячейка `01_data` сама перечитывает конфиг через `importlib.reload`, пересоздаёт каталог и обновляет Markdown — перезапуск kernel не требуется.
@@ -256,13 +263,23 @@ issues/ISSUE-001 Короткое название.md
 
 ### Новый эксперимент
 
-1. Из корня проекта выполнить `.\new-experiment.cmd`. Launcher предложит следующий `EXP-xxx`, параметры, guardrails и последний модуль с `decision="adopt"` как явный parent. Для независимой ablation-проверки используйте `--from-baseline`.
+1. Из корня проекта выполнить `.\new-experiment.cmd`. Launcher предложит следующий `EXP-xxx`, параметры, guardrails и модуль последней карточки с `decision: adopt` как явный parent. Для независимой ablation-проверки используйте `--from-baseline`.
 2. В workbench написать draft-преобразование, обновить draft feature groups, выполнить contract и smoke-fit. Reference уже содержит все принятые родительские изменения; при необходимости включите несохраняемый `RUN_DRY_CV`.
 3. Перенести проверенную реализацию из workbench в две функции модуля: `prepare_candidate_data(...)` и `build_candidate_models(...)`. Все обучаемые преобразования должны оставаться внутри sklearn Pipeline, чтобы обучаться отдельно на каждом fold.
 4. В модуле заполнить `EXPERIMENT`: гипотезу, единственное изменение, ожидаемый эффект, `primary_improvement_min` и при необходимости `metric_guardrails`; затем включить `RUN_MODULE_SMOKE` в workbench.
 5. Только после успешного module smoke перезапустить kernel и выполнить строгий [[notebooks/04_experiment.ipynb]] сверху вниз. Он создаст карточку, графики, таблицы, metadata и обновит сводные документы.
-6. Интерпретировать результат и изменить только `EXPERIMENT.decision` на `adopt`, `reject`, `iterate` или `inconclusive`; затем повторно выполнить финальную синхронизацию. Только `adopt` делает модуль возможным родителем следующего experiment.
-7. Следующий launcher автоматически выберет последний adopted-модуль и запишет его точное имя в новый контракт. Старые модули не переписывать, кроме формализации их `decision`; workbench можно оставить локально или удалить после переноса кода.
+6. Интерпретировать результат и изменить только поле `decision:` во frontmatter Markdown-карточки на `adopt`, `reject`, `iterate` или `inconclusive`; затем запустить `.\sync-experiment-state.cmd`. Только `adopt` делает модуль возможным родителем следующего experiment.
+7. Следующий launcher автоматически выберет последний adopted-модуль и запишет его точное имя в новый контракт. Versioned Python-модуль после запуска не переписывать; workbench можно оставить локально или удалить после переноса кода.
+
+В коде эксперимента используются три явные роли настроек:
+
+- `initial_settings` — исходный `ModelingSettings` из EXP-001; он фиксирует общий schema/metrics/CV contract;
+- `reference_settings` — настройки baseline или принятого чемпиона после применения всей parent-цепочки;
+- `candidate_settings` — копия reference после единственного контролируемого изменения текущего эксперимента.
+
+`ExperimentSettings` отвечает за другую часть контракта: гипотезу, критерии,
+parent, решение и provenance. Старое имя типа `BaselineSettings` сохранено
+только как совместимый alias; новый код должен использовать `ModelingSettings`.
 
 Если эксперимент меняет только гиперпараметр или estimator, функция подготовки
 может вернуть входные данные без изменений. Если меняются признаки, обучаемое

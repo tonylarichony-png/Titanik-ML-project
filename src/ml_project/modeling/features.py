@@ -11,7 +11,7 @@ import pandas as pd
 from ..profiling import validate_feature_groups
 from ._utils import _sklearn_import_error
 from .contracts import (
-    BaselineSettings,
+    ModelingSettings,
     CLASSIFICATION_TASKS,
     FeaturePlan,
     PreparedData,
@@ -23,7 +23,7 @@ def resolve_feature_plan(
     *,
     target: str | None,
     key: str | None,
-    settings: BaselineSettings,
+    settings: ModelingSettings,
 ) -> FeaturePlan:
     """Resolve explicit feature groups into model columns without dtype guessing."""
 
@@ -45,12 +45,12 @@ def resolve_feature_plan(
         messages = []
         if unknown_include:
             messages.append(
-                "BASELINE.include_features absent from train: "
+                "settings.include_features absent from train: "
                 + ", ".join(unknown_include)
             )
         if unknown_exclude:
             messages.append(
-                "BASELINE.exclude_features absent from train: "
+                "settings.exclude_features absent from train: "
                 + ", ".join(unknown_exclude)
             )
         raise ValueError("\n".join(messages))
@@ -74,8 +74,8 @@ def resolve_feature_plan(
         unsupported_requested = sorted(requested - group_candidates)
         if unsupported_requested:
             raise ValueError(
-                "BASELINE.include_features contains columns outside "
-                "BASELINE.model_feature_groups: "
+                "settings.include_features contains columns outside "
+                "settings.model_feature_groups: "
                 + ", ".join(unsupported_requested)
             )
         selected = requested
@@ -102,7 +102,7 @@ def resolve_feature_plan(
     if not numeric and not categorical:
         raise ValueError(
             "The baseline has no model features. Fill FEATURE_GROUPS or adjust "
-            "BASELINE.model_feature_groups/BASELINE.include_features."
+            "settings.model_feature_groups/settings.include_features."
         )
 
     exclusion_reason: dict[str, str] = {}
@@ -113,9 +113,9 @@ def resolve_feature_plan(
         if feature == key:
             reason = "project key / identifier"
         elif feature in settings.exclude_features:
-            reason = "explicit BASELINE.exclude_features"
+            reason = "explicit settings.exclude_features"
         elif settings.include_features and feature not in settings.include_features:
-            reason = "outside BASELINE.include_features whitelist"
+            reason = "outside settings.include_features whitelist"
         elif group not in enabled_groups:
             reason = f"group {group!r} is not enabled for this baseline"
         else:
@@ -172,7 +172,7 @@ def prepare_training_data(
     *,
     target: str,
     plan: FeaturePlan,
-    settings: BaselineSettings,
+    settings: ModelingSettings,
 ) -> PreparedData:
     """Prepare rows for CV without fitting any preprocessing statistic."""
 
@@ -225,7 +225,7 @@ def prepare_training_data(
 
 
 
-def build_tabular_preprocessor(settings: BaselineSettings, plan: FeaturePlan) -> Any:
+def build_tabular_preprocessor(settings: ModelingSettings, plan: FeaturePlan) -> Any:
     """Build fold-fitted numeric/categorical preprocessing."""
 
     try:
@@ -310,7 +310,7 @@ def build_tabular_preprocessor(settings: BaselineSettings, plan: FeaturePlan) ->
 
 
 def preprocessing_report(
-    settings: BaselineSettings,
+    settings: ModelingSettings,
     plan: FeaturePlan,
 ) -> pd.DataFrame:
     """Explain the transformations before any model is fitted."""

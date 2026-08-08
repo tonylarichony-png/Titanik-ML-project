@@ -33,14 +33,23 @@ TRACKED_METRIC_FIGURE_ROOT = Path("assets/experiments")
 
 
 @dataclass(frozen=True)
-class BaselineSettings:
-    """Complete, typed baseline configuration."""
+class ModelingSettings:
+    """Настройки подготовки, обучения, валидации и сохранения модели.
 
+    Это нейтральный контракт: объект может описывать исходный baseline,
+    текущий reference-чемпион или candidate после контролируемого изменения.
+    Роль конкретного экземпляра определяется именем переменной
+    ``reference_settings`` / ``candidate_settings``, а не типом.
+    """
+
+    # Задача и состав признаков, которые разрешено передать модели.
     task_type: str | None
     model_feature_groups: tuple[str, ...]
     include_features: tuple[str, ...]
     exclude_features: tuple[str, ...]
     require_inference_features: bool
+
+    # Метрики, схема cross-validation и воспроизводимость вычислений.
     primary_scorer: Any
     secondary_scorers: Mapping[str, Any]
     cv_strategy: str
@@ -52,6 +61,8 @@ class BaselineSettings:
     n_jobs: int | None
     error_score: str | float
     return_train_score: bool
+
+    # Fold-safe preprocessing: параметры обучаются отдельно внутри каждого fold.
     numeric_imputer: str
     numeric_fill_value: Any
     add_numeric_missing_indicator: bool
@@ -63,11 +74,15 @@ class BaselineSettings:
     onehot_max_categories: int | None
     onehot_sparse_output: bool
     column_transformer_sparse_threshold: float
+
+    # Reference estimator и no-skill модель для проверки здравого смысла.
     run_dummy_baseline: bool
     dummy_strategy: str
     dummy_params: Mapping[str, Any]
     model_name: str
     model_params: Mapping[str, Any]
+
+    # Идентичность запуска и управляемые действия записи результатов.
     experiment_id: str
     experiment_title: str
     experiment_note: Path
@@ -82,9 +97,14 @@ class BaselineSettings:
     allow_overwrite: bool
 
 
+# Временная обратная совместимость со старыми модулями и сохранёнными объектами.
+# Новый код должен импортировать ModelingSettings.
+BaselineSettings = ModelingSettings
+
+
 @dataclass(frozen=True)
 class ExperimentSettings:
-    """Complete, typed controlled-experiment configuration."""
+    """Описание гипотезы, сравнения, решения и provenance эксперимента."""
 
     experiment_id: str
     experiment_title: str
@@ -97,7 +117,6 @@ class ExperimentSettings:
     reference_model: str
     primary_candidate: str
     experiment_parameters: Mapping[str, Any]
-    decision: str
     run_name: str
     artifact_dir: Path
     results_registry: Path
@@ -109,15 +128,18 @@ class ExperimentSettings:
     sync_docs: bool
     allow_overwrite: bool
     parent_experiment_module: str | None = None
+    # Mutable lifecycle state is read from the Markdown experiment card.
+    # This fallback is used only before the card exists (the first run).
+    decision: str = "pending"
 
 
 @dataclass(frozen=True)
 class ExperimentData:
-    """Candidate frame, feature contract and optional notebook diagnostics."""
+    """Данные candidate и его эффективные ModelingSettings."""
 
     frame: pd.DataFrame
     feature_groups: Mapping[str, Sequence[str]]
-    settings: BaselineSettings
+    settings: ModelingSettings
     diagnostics: Mapping[str, Any] = field(default_factory=dict)
 
 
@@ -219,6 +241,7 @@ class CVEvaluation:
     fold_scores: pd.DataFrame
     summary: pd.DataFrame
     raw_results: Mapping[str, Mapping[str, Any]]
+    cv_splits: tuple[tuple[Any, Any], ...] = ()
 
     def primary_summary(self) -> pd.DataFrame:
         return self.summary[

@@ -99,6 +99,7 @@ from pathlib import Path
 import copy
 import importlib
 import sys
+from typing import Any, Mapping
 
 from IPython.display import display
 import numpy as np
@@ -118,6 +119,7 @@ import ml_project.config as project_config
 import ml_project.baseline_config as baseline_config
 import ml_project.modeling as modeling_tools
 import ml_project.experiment as experiment_tools
+from ml_project.modeling import ExperimentData, ModelingSettings
 
 EXPERIMENT_MODULE = {module_name!r}
 PARENT_EXPERIMENT_MODULE = {parent_experiment_module!r}
@@ -134,14 +136,18 @@ catalog.validate()
 train = catalog.load(project_config.TRAIN_DATASET)
 train_snapshot = train.copy(deep=True)
 
-# Один процесс делает dry-run предсказуемым в Windows.
-baseline_settings = replace(baseline_config.BASELINE, n_jobs=1)
+# initial_settings — исходная точка цепочки: ModelingSettings из EXP-001.
+# n_jobs=1 влияет только на локальный workbench и делает dry-run стабильнее.
+initial_settings = replace(baseline_config.BASELINE, n_jobs=1)
 parent_data = experiment_tools.prepare_reference_experiment_data(
     PARENT_EXPERIMENT_MODULE,
     train,
     FEATURE_GROUPS,
-    baseline_settings,
+    initial_settings,
 )
+# reference_settings — эффективные настройки сравниваемой модели после
+# применения всех принятых parent-экспериментов.
+reference_settings = parent_data.settings
 parent_snapshot = parent_data.frame.copy(deep=True)
 
 print("Project:", PROJECT_ROOT)
@@ -153,27 +159,61 @@ display(parent_data.frame.head())
         ),
         _markdown(
             "workbench-draft-md",
-            """## 2. Разработать чистое преобразование
+            """## 2. Подготовить candidate data
 
-Редактируйте функцию прямо в этой ячейке. Она должна возвращать новый
-DataFrame и не изменять `train`. Детерминированные признаки допустимо создавать
-здесь; статистики, которые обучаются на данных, позднее должны стать sklearn-
-transformer внутри candidate Pipeline.
+Редактируйте функцию прямо в этой ячейке. Её сигнатура, локальные переменные и
+возвращаемый `ExperimentData` совпадают с `prepare_candidate_data(...)` в
+Python-модуле эксперимента. После проверки функцию можно перенести целиком без
+переименования `result`/`frame` и `draft_feature_groups`/`groups`.
+
+Функция не должна изменять входной `train`. Детерминированные признаки можно
+создавать здесь; статистики, которые обучаются на данных, позднее должны стать
+sklearn-transformer внутри candidate Pipeline.
 """,
         ),
         _code(
             "workbench-draft",
-            """def draft_transform(frame: pd.DataFrame) -> pd.DataFrame:
-    result = frame.copy(deep=True)
+            """def prepare_candidate_data(
+    train: pd.DataFrame,
+    feature_groups: Mapping[str, Any],
+    reference_settings: ModelingSettings,
+) -> ExperimentData:
+    \"\"\"Подготовить candidate поверх настроек baseline/чемпиона.\"\"\"
+
+    frame = train.copy(deep=True)
+    groups = copy.deepcopy(feature_groups)
+    candidate_settings = reference_settings
 
     # EDIT HERE — создайте или измените экспериментальные признаки.
     # Пример:
-    # result["FamilySize"] = result["SibSp"] + result["Parch"] + 1
+    # frame["FamilySize"] = frame["SibSp"] + frame["Parch"] + 1
 
-    return result
+    # EDIT HERE — зарегистрируйте каждый новый model-ready признак ровно
+    # в одной группе:
+    # groups["count"] = [*groups.get("count", []), "FamilySize"]
+
+    # EDIT HERE — если меняются настройки относительно reference:
+    # candidate_settings = replace(
+    #     reference_settings,
+    #     exclude_features=(*reference_settings.exclude_features, "OldFeature"),
+    # )
+
+    return ExperimentData(
+        frame=frame,
+        feature_groups=groups,
+        settings=candidate_settings,
+        diagnostics={},
+    )
 
 
-draft_frame = draft_transform(parent_data.frame)
+candidate_data = prepare_candidate_data(
+    parent_data.frame,
+    parent_data.feature_groups,
+    reference_settings,
+)
+draft_frame = candidate_data.frame
+groups = candidate_data.feature_groups
+candidate_settings = candidate_data.settings
 display(draft_frame.head())
 """,
         ),
@@ -188,8 +228,10 @@ display(draft_frame.head())
         ),
         _code(
             "workbench-contract",
-            """if not isinstance(draft_frame, pd.DataFrame):
-    raise TypeError("draft_transform must return a pandas DataFrame")
+            """if not isinstance(candidate_data, ExperimentData):
+    raise TypeError("prepare_candidate_data must return ExperimentData")
+if not isinstance(draft_frame, pd.DataFrame):
+    raise TypeError("ExperimentData.frame must be a pandas DataFrame")
 
 pd.testing.assert_frame_equal(train, train_snapshot)
 pd.testing.assert_frame_equal(parent_data.frame, parent_snapshot)
@@ -239,33 +281,25 @@ display(diagnostics)
             "workbench-groups-md",
             """## 4. Настроить feature groups
 
-Добавьте каждый новый model-ready столбец ровно в одну группу. Если исходные
-признаки заменяются новым, явно перенесите их в `ignored` или исключите через
-candidate settings — это часть единственного контролируемого изменения.
+Эта ячейка проверяет `groups`, которые вернула `prepare_candidate_data(...)`.
+Добавление признаков в группы и изменение `candidate_settings` выполняются в
+самой функции выше, чтобы её можно было перенести в Python-модуль целиком.
 """,
         ),
         _code(
             "workbench-groups",
-            """draft_feature_groups = copy.deepcopy(parent_data.feature_groups)
-
-# EDIT HERE — пример:
-# draft_feature_groups["count"] = [
-#     *draft_feature_groups.get("count", []),
-#     "FamilySize",
-# ]
-
-memberships = {
+            """memberships = {
     column: [
         group
-        for group, columns in draft_feature_groups.items()
+        for group, columns in groups.items()
         if column in columns
     ]
     for column in new_columns
 }
 invalid_memberships = {
-    column: groups
-    for column, groups in memberships.items()
-    if len(groups) != 1
+    column: matched_groups
+    for column, matched_groups in memberships.items()
+    if len(matched_groups) != 1
 }
 if invalid_memberships:
     raise ValueError(
@@ -275,10 +309,10 @@ if invalid_memberships:
 
 candidate_plan = modeling_tools.resolve_feature_plan(
     draft_frame,
-    draft_feature_groups,
+    groups,
     target=TARGET,
     key=KEY,
-    settings=parent_data.settings,
+    settings=candidate_settings,
 )
 display(candidate_plan.to_frame())
 """,
@@ -304,7 +338,7 @@ draft-изменение. Это smoke-проверка API, а не офици�
 
 
 draft_preprocessor = modeling_tools.build_tabular_preprocessor(
-    parent_data.settings,
+    candidate_settings,
     candidate_plan,
 )
 reference_plan = modeling_tools.resolve_feature_plan(
@@ -312,13 +346,13 @@ reference_plan = modeling_tools.resolve_feature_plan(
     parent_data.feature_groups,
     target=TARGET,
     key=KEY,
-    settings=parent_data.settings,
+    settings=reference_settings,
 )
 reference_training = modeling_tools.prepare_training_data(
     parent_data.frame,
     target=TARGET,
     plan=reference_plan,
-    settings=parent_data.settings,
+    settings=reference_settings,
 )
 draft_data = experiment_tools.prepare_experiment_data(
     reference_training,
@@ -326,17 +360,17 @@ draft_data = experiment_tools.prepare_experiment_data(
     target=TARGET,
 )
 reference_preprocessor = modeling_tools.build_tabular_preprocessor(
-    parent_data.settings,
+    reference_settings,
     reference_plan,
 )
 reference_model = experiment_tools.build_reference_pipeline(
     PARENT_EXPERIMENT_MODULE,
     reference_preprocessor,
-    parent_data.settings,
+    reference_settings,
 )
 draft_models = draft_build_candidate_models(
     draft_preprocessor,
-    parent_data.settings,
+    candidate_settings,
 )
 workbench_models = {
     "workbench_reference": reference_model,
@@ -361,8 +395,8 @@ for model_name, model in workbench_models.items():
 
 if RUN_DRY_CV:
     dry_settings = replace(
-        parent_data.settings,
-        n_splits=min(3, parent_data.settings.n_splits),
+        candidate_settings,
+        n_splits=min(3, candidate_settings.n_splits),
         n_jobs=1,
         save_artifacts=False,
         save_metric_figures=False,
@@ -391,8 +425,8 @@ else:
 Официальный source of truth:
 `src/ml_project/experiments/{experiment_id.lower().replace("-", "_")}_{slug}.py`.
 
-1. Перенесите `draft_transform` и изменения `draft_feature_groups` в
-   `prepare_candidate_data(...)`.
+1. Замените заготовку `prepare_candidate_data(...)` в модуле одноимённой
+   функцией из раздела 2 — её можно перенести целиком без адаптации имён.
 2. Перенесите `draft_build_candidate_models(...)` в
    `build_candidate_models(...)`.
 3. Удалите `NotImplementedError` и оставшиеся `CHANGE ME`.
@@ -416,7 +450,7 @@ if RUN_MODULE_SMOKE:
         definition,
         train,
         FEATURE_GROUPS,
-        baseline_settings,
+        initial_settings,
     )
     module_reference_plan = modeling_tools.resolve_feature_plan(
         module_parent.frame,
@@ -435,7 +469,7 @@ if RUN_MODULE_SMOKE:
         definition,
         train,
         FEATURE_GROUPS,
-        baseline_settings,
+        initial_settings,
     )
     module_plan = modeling_tools.resolve_feature_plan(
         module_data.frame,

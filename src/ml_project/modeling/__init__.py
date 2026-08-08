@@ -7,6 +7,7 @@ from .artifacts import (
 )
 from .contracts import (
     BaselineSettings,
+    ModelingSettings,
     CVEvaluation,
     ExperimentData,
     ExperimentDefinition,
@@ -15,6 +16,12 @@ from .contracts import (
     PreparedData,
     SavedBaselineRun,
     ScoringPlan,
+)
+from .diagnostics import (
+    ExperimentDiagnostics,
+    SavedDiagnostics,
+    diagnose_experiment,
+    save_experiment_diagnostics,
 )
 from .estimators import (
     build_dummy_estimator,
@@ -49,7 +56,11 @@ from .reporting import (
     sync_baseline_docs,
     sync_baseline_experiment_note,
 )
-from .settings import settings_report, validate_baseline_settings
+from .settings import (
+    settings_report,
+    validate_baseline_settings,
+    validate_modeling_settings,
+)
 from .validation import (
     build_cv_splitter,
     cv_protocol_description,
@@ -61,13 +72,16 @@ from .validation import (
 
 __all__ = [
     "BaselineSettings",
+    "ModelingSettings",
     "CVEvaluation",
     "ExperimentData",
     "ExperimentDefinition",
+    "ExperimentDiagnostics",
     "ExperimentSettings",
     "FeaturePlan",
     "PreparedData",
     "SavedBaselineRun",
+    "SavedDiagnostics",
     "ScoringPlan",
     "audit_modeling_report",
     "build_baseline_experiment_report",
@@ -89,6 +103,7 @@ __all__ = [
     "build_validation_baseline_block",
     "build_validation_protocol_block",
     "cv_protocol_description",
+    "diagnose_experiment",
     "evaluate_models_cv",
     "metric_figure_filename",
     "prepare_training_data",
@@ -100,9 +115,11 @@ __all__ = [
     "resolved_model_label",
     "resolved_model_name",
     "save_baseline_run",
+    "save_experiment_diagnostics",
     "settings_report",
     "sync_baseline_docs",
     "sync_baseline_experiment_note",
     "validate_baseline_settings",
+    "validate_modeling_settings",
     "validate_inference_schema",
 ]

@@ -31,7 +31,7 @@ from ml_project.baseline import (
     save_baseline_run,
     sync_baseline_docs,
     sync_baseline_experiment_note,
-    validate_baseline_settings,
+    validate_modeling_settings,
 )
 
 try:
@@ -109,7 +109,7 @@ def configured_settings(**changes: object):
     }
     defaults.update(changes)
     settings = replace(settings, **defaults)
-    validate_baseline_settings(settings)
+    validate_modeling_settings(settings)
     return settings
 
 
@@ -126,6 +126,16 @@ class TrackedMetricFigureTests(unittest.TestCase):
     class FakeFigure:
         def savefig(self, path: Path, **_: object) -> None:
             path.write_bytes(b"png")
+
+    def test_legacy_baseline_settings_names_remain_compatible(self) -> None:
+        self.assertIs(
+            modeling_tools.BaselineSettings,
+            modeling_tools.ModelingSettings,
+        )
+        self.assertIs(
+            modeling_tools.validate_baseline_settings,
+            modeling_tools.validate_modeling_settings,
+        )
 
     def test_modeling_package_prepares_data_through_public_api(self) -> None:
         settings = configured_settings()

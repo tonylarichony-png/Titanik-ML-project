@@ -7,6 +7,7 @@ created: 2026-08-05
 hypothesis: " if объединить признаки,и категоризировать then должен улучшиться accuracy, because потому, что данный признак будет лучше определять одиночек, либо семью так как зависимость нелинейная:1,2,3,4,>4 "
 primary_metric: "accuracy"
 decision: adopt
+eda_findings: []
 ---
 
 # EXP-003 — Объединение SibSp и Parch в признак FamilySizeGroup
@@ -27,7 +28,7 @@ decision: adopt
 | Одно изменение      | Взять признаки SibSp и Parch и объединить в FamilySize, относительно EXP002 больше ничего не менять                                                                                                   |
 | Критерий успеха     | Primary improvement >= +0.0050; add explicit metric guardrails below.                                                                                                                                 |
 | Формальные критерии | passed                                                                                                                                                                                                |
-| Решение             | adopt                                                                                                                                                                                                 |
+| Решение | adopt |
 | Run                 | exp_003_v1                                                                                                                                                                                            |
 | Версия данных       | 7d118fef8b6c…                                                                                                                                                                                         |
 | Validation          | stratified_kfold(n_splits=5, shuffle=True, seed=42)                                                                                                                                                   |
@@ -36,7 +37,7 @@ decision: adopt
 | Основная метрика    | accuracy                                                                                                                                                                                              |
 | Цепочка             | EXP-001 → [[experiments/EXP-002 AGE_Experiment.md\|EXP-002]] → EXP-003                                                                                                                                |
 | Код эксперимента    | [[src/ml_project/experiments/exp_003_family_size.py\|ml_project.experiments.exp_003_family_size]]                                                                                                     |
-| Hash кода           | 0132c98462d3…                                                                                                                                                                                         |
+| Hash кода           | 1e4a834e3e0e…                                                                                                                                                                                         |
 
 > [!note] Как читать Δ
 > Положительное значение означает улучшение — и для maximize, и для minimize-метрик.
@@ -201,6 +202,14 @@ decision: adopt
 
 <!-- auto:experiment-report:end -->
 
+## EDA-основания
+
+<!-- auto:experiment-eda-links:start -->
+
+> EDA-основания пока не указаны. Добавьте ID в frontmatter: `eda_findings: ["EDA-003"]`, затем запустите `sync-experiment-links.cmd`.
+
+<!-- auto:experiment-eda-links:end -->
+
 ## Анализ результата — заполнить вручную
 
 - **Что произошло:**
@@ -211,7 +220,7 @@ decision: adopt
 
 ## Обоснование решения — заполнить вручную
 
-> Машинный source of truth для decision находится в модуле эксперимента; карточка и registry синхронизируются из него.
+> Source of truth для `decision` — поле во frontmatter этой карточки. После изменения запустите `sync-experiment-state.cmd`; переобучение не требуется.
 
 - **Почему выбрано это решение:**
 - **Следующий шаг:**

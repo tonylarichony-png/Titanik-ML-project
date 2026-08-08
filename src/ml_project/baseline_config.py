@@ -9,10 +9,13 @@ After saving this file, rerun the notebook cell "Reload configuration".
 
 from pathlib import Path
 
-from .modeling.contracts import BaselineSettings
+from .modeling.contracts import ModelingSettings
 
 
-BASELINE = BaselineSettings(
+# BASELINE — стартовый экземпляр ModelingSettings для EXP-001.
+# В EXP-002 он является reference_settings, а следующие эксперименты получают
+# уже настройки принятого чемпиона и создают из них candidate_settings.
+BASELINE = ModelingSettings(
     # 1. Task
     task_type="binary_classification",
 

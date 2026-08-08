@@ -13,7 +13,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.utils.validation import check_is_fitted
 
 from ml_project.modeling import (
-    BaselineSettings,
+    ModelingSettings,
     ExperimentData,
     ExperimentSettings,
     build_simple_estimator,
@@ -111,9 +111,13 @@ class TitleExtractor(BaseEstimator, TransformerMixin):
 def prepare_candidate_data(
     train: pd.DataFrame,
     feature_groups: Mapping[str, Any],
-    baseline_settings: BaselineSettings,
+    reference_settings: ModelingSettings,
 ) -> ExperimentData:
-    """Return unchanged raw data plus diagnostics; modeling stays in Pipeline."""
+    """Подготовить EXP-002 поверх настроек EXP-001 reference."""
+
+    # reference_settings здесь взяты из BASELINE (EXP-001). EXP-002 не меняет
+    # отбор признаков, CV или estimator: меняется только fold-safe Age pipeline.
+    candidate_settings = reference_settings
 
     diagnostic_frame = train.copy(deep=True)
     diagnostic_frame["Title"] = _normalized_titles(diagnostic_frame)
@@ -138,7 +142,7 @@ def prepare_candidate_data(
     return ExperimentData(
         frame=train.copy(deep=True),
         feature_groups=copy.deepcopy(feature_groups),
-        settings=baseline_settings,
+        settings=candidate_settings,
         diagnostics={
             "Распределение нормализованных Title": title_report,
             "Age по Title × Pclass": age_group_report,
@@ -148,10 +152,10 @@ def prepare_candidate_data(
 
 def build_candidate_models(
     preprocessor: Any,
-    candidate_settings: BaselineSettings,
+    candidate_settings: ModelingSettings,
     experiment_settings: ExperimentSettings,
 ) -> dict[str, Any]:
-    """Build the one-factor candidate under the shared baseline estimator."""
+    """Собрать candidate с Age-imputer и остальными настройками reference."""
 
     candidate = Pipeline(
         steps=[

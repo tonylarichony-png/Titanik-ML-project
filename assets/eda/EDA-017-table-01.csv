@@ -1,0 +1,51 @@
+index,Parch,SibSp,Ticket,Fare,Name,Pclass,Survived,Sex,Cabin
+504,0,0,110152,86.5,"Maioni, Miss. Roberta",1,1,female,B79
+759,0,0,110152,86.5,"Rothes, the Countess. of (Lucy Noel Martha Dyer-Edwards)",1,1,female,B77
+558,1,1,110413,79.65,"Taussig, Mrs. Emil (Tillie Mandelbaum)",1,1,female,E67
+585,2,0,110413,79.65,"Taussig, Miss. Ruth",1,1,female,E68
+475,0,0,110465,52.0,"Clifford, Mr. George Quincy",1,0,male,A14
+523,1,0,111361,57.9792,"Hippach, Mrs. Louis Albert (Ida Sophia Fischer)",1,1,female,B18
+356,1,0,113505,55.0,"Bowerman, Miss. Elsie Edith",1,1,female,E33
+829,0,0,113572,80.0,"Stone, Mrs. George Nelson (Martha Evelyn)",1,1,female,B28
+802,2,1,113760,120.0,"Carter, Master. William Thornton II",1,1,male,B96 B98
+763,2,1,113760,120.0,"Carter, Mrs. William Ernest (Lucile Polk)",1,1,female,B96 B98
+435,2,1,113760,120.0,"Carter, Miss. Lucile Polk",1,1,female,B96 B98
+336,0,1,113776,66.6,"Pears, Mr. Thomas Clinton",1,0,male,C2
+708,0,0,113781,151.55,"Cleaver, Miss. Alice",1,1,female,
+498,2,1,113781,151.55,"Allison, Mrs. Hudson J C (Bessie Waldo Daniels)",1,0,female,C22 C26
+305,2,1,113781,151.55,"Allison, Master. Hudson Trevor",1,1,male,C22 C26
+383,0,1,113789,52.0,"Holverson, Mrs. Alexander Oskar (Mary Aline Towner)",1,1,female,
+842,0,0,113798,31.0,"Serepeca, Miss. Augusta",1,1,female,
+137,0,1,113803,53.1,"Futrelle, Mr. Jacques Heath",1,0,male,C123
+809,0,1,113806,53.1,"Chambers, Mrs. Norman Campbell (Bertha Griggs)",1,1,female,E8
+117,0,1,11668,21.0,"Turpin, Mr. William John Robert",2,0,male,
+871,1,1,11751,52.5542,"Beckwith, Mrs. Richard Leonard (Sallie Monypeny)",1,1,female,D35
+879,1,0,11767,83.1583,"Potter, Mrs. Thomas Jr (Lily Alexenia Wilson)",1,1,female,C50
+484,0,1,11967,91.0792,"Bishop, Mr. Dickinson H",1,1,male,B49
+820,1,1,12749,93.5,"Hays, Mrs. Charles Melville (Clara Jennings Gregg)",1,1,female,B69
+627,0,0,13502,77.9583,"Longley, Miss. Gretchen Fiske",1,1,female,D9
+765,0,1,13502,77.9583,"Hogeboom, Mrs. John C (Anna Andrews)",1,1,female,D11
+577,0,1,13507,55.9,"Silvey, Mrs. William Baird (Alice Munger)",1,1,female,E44
+826,0,0,1601,56.4958,"Lam, Mr. Len",3,0,male,
+509,0,0,1601,56.4958,"Lang, Mr. Fang",3,1,male,
+838,0,0,1601,56.4958,"Chip, Mr. Chang",3,1,male,
+169,0,0,1601,56.4958,"Ling, Mr. Lee",3,0,male,
+643,0,0,1601,56.4958,"Foo, Mr. Choong",3,1,male,
+692,0,0,1601,56.4958,"Lam, Mr. Ali",3,1,male,
+337,0,0,16966,134.5,"Burns, Miss. Elizabeth Margaret",1,1,female,E40
+698,1,1,17421,110.8833,"Thayer, Mr. John Borland",1,0,male,C68
+581,1,1,17421,110.8833,"Thayer, Mrs. John Borland (Marian Longstreth Morris)",1,1,female,C68
+550,2,0,17421,110.8833,"Thayer, Mr. John Borland Jr",1,1,male,C70
+849,0,1,17453,89.1042,"Goldenberg, Mrs. Samuel L (Edwiga Grabowska)",1,1,female,C92
+781,0,1,17474,57.0,"Dick, Mrs. Albert Adrian (Vera Gillespie)",1,1,female,B20
+741,0,1,19877,78.85,"Cavendish, Mr. Tyrell William",1,0,male,C46
+412,0,1,19928,90.0,"Minahan, Miss. Daisy E",1,1,female,C78
+486,0,1,19943,90.0,"Hoyt, Mrs. Frederick Maxfield (Jane Anne Forby)",1,1,female,C93
+341,2,3,19950,263.0,"Fortune, Miss. Alice Elizabeth",1,1,female,C23 C25 C27
+438,4,1,19950,263.0,"Fortune, Mr. Mark",1,0,male,C23 C25 C27
+88,2,3,19950,263.0,"Fortune, Miss. Mabel Helen",1,1,female,C23 C25 C27
+712,0,1,19996,52.0,"Taylor, Mr. Elmer Zebley",1,1,male,C126
+754,2,1,220845,65.0,"Herman, Mrs. Samuel (Jane Laver)",2,1,female,
+340,1,1,230080,26.0,"Navratil, Master. Edmond Roger",2,1,male,F2
+193,1,1,230080,26.0,"Navratil, Master. Michel M",2,1,male,F2
+618,1,2,230136,39.0,"Becker, Miss. Marion Louise",2,1,female,F4

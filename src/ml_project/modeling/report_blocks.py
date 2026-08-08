@@ -12,7 +12,7 @@ import pandas as pd
 from ..docsync import dataframe_to_markdown
 from ._utils import _display_value
 from .contracts import (
-    BaselineSettings,
+    ModelingSettings,
     FeaturePlan,
     PreparedData,
     SavedBaselineRun,
@@ -51,12 +51,12 @@ def build_secondary_metrics_block(scoring: ScoringPlan) -> str:
 
 
 def build_validation_protocol_block(
-    settings: BaselineSettings,
+    settings: ModelingSettings,
     scoring: ScoringPlan,
     *,
     cv_description: str,
 ) -> str:
-    """Render the executable validation contract from baseline settings."""
+    """Render the executable validation contract from ModelingSettings."""
 
     primary_direction = scoring.directions["primary"]
     report = pd.DataFrame(
@@ -94,7 +94,7 @@ def _installed_version(distribution: str) -> str:
 
 def build_reproducibility_block(
     project_root: Path,
-    settings: BaselineSettings,
+    settings: ModelingSettings,
     *,
     dataset_version: str,
     cv_description: str,
@@ -148,7 +148,7 @@ def build_reproducibility_block(
 
 
 def build_model_ready_block(
-    settings: BaselineSettings,
+    settings: ModelingSettings,
     plan: FeaturePlan,
     *,
     dataset_version: str,
@@ -195,7 +195,7 @@ def build_feature_registry_block(plan: FeaturePlan) -> str:
 
 
 def build_preprocessing_block(
-    settings: BaselineSettings,
+    settings: ModelingSettings,
     plan: FeaturePlan,
 ) -> str:
     """Render preprocessing that is actually built by the baseline pipeline."""

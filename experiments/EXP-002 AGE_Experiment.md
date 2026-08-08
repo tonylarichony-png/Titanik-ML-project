@@ -7,6 +7,7 @@ created: 2026-08-02
 hypothesis: "Если заполнить Age медианой по Title и Pclass внутри каждого train-fold, то accuracy повысится, потому что эти признаки несут информацию о возрасте."
 primary_metric: "accuracy"
 decision: adopt
+eda_findings: []
 ---
 
 # EXP-002 — Заполнение пропусков Age с помощью "title" and "Pclass"
@@ -27,7 +28,7 @@ decision: adopt
 | Одно изменение      | Новый fold-safe способ заполнения пропусков Age                                                                                                      |
 | Критерий успеха     | Legacy pre-registration: accuracy должна вырасти; минимальный эффект и guardrails до первого запуска не были зафиксированы.                          |
 | Формальные критерии | passed                                                                                                                                               |
-| Решение             | adopt                                                                                                                                                |
+| Решение | adopt |
 | Run                 | exp_002_v1                                                                                                                                           |
 | Версия данных       | 7d118fef8b6c…                                                                                                                                        |
 | Validation          | stratified_kfold(n_splits=5, shuffle=True, seed=42)                                                                                                  |
@@ -36,7 +37,7 @@ decision: adopt
 | Основная метрика    | accuracy                                                                                                                                             |
 | Цепочка             | EXP-001 → EXP-002                                                                                                                                    |
 | Код эксперимента    | [[src/ml_project/experiments/exp_002_age_imputation.py\|ml_project.experiments.exp_002_age_imputation]]                                              |
-| Hash кода           | 7d95d20f5d10…                                                                                                                                        |
+| Hash кода           | d35152a5d257…                                                                                                                                        |
 
 > [!note] Как читать Δ
 > Положительное значение означает улучшение — и для maximize, и для minimize-метрик.
@@ -198,6 +199,14 @@ decision: adopt
 
 <!-- auto:experiment-report:end -->
 
+## EDA-основания
+
+<!-- auto:experiment-eda-links:start -->
+
+> EDA-основания пока не указаны. Добавьте ID в frontmatter: `eda_findings: ["EDA-003"]`, затем запустите `sync-experiment-links.cmd`.
+
+<!-- auto:experiment-eda-links:end -->
+
 ## Анализ результата — заполнить вручную
 
 - **Что произошло:** Замена пропусков Age повысила среднюю аккураси на +0.0067
@@ -206,9 +215,8 @@ decision: adopt
 
 ## Обоснование решения
 
-> Машинный source of truth для `decision` находится в
-> `src/ml_project/experiments/exp_002_age_imputation.py`. После выбора решения
-> карточка и registry синхронизируются из этого модуля.
+> Source of truth для `decision` — поле во frontmatter этой карточки.
+> После изменения запустите `sync-experiment-state.cmd`; переобучение не требуется.
 
 - **Итоговое решение:** adopt — принимаем новый fold-safe Age imputer.
 - **Следующий шаг:** использовать EXP-002 как champion reference для EXP-003.

@@ -17,20 +17,27 @@ import pandas as pd
 
 from . import modeling as modeling_tools
 from .modeling import (
-    BaselineSettings,
+    ModelingSettings,
     CVEvaluation,
     ExperimentData,
     ExperimentDefinition,
+    ExperimentDiagnostics,
     ExperimentSettings,
     FeaturePlan,
     PreparedData,
     SavedBaselineRun,
+    SavedDiagnostics,
     ScoringPlan,
 )
 from .docsync import MarkdownDocument, dataframe_to_markdown
+from .experiment_relations import sync_experiment_eda_relations
+from .experiment_state import (
+    DECISIONS,
+    settings_with_card_decision,
+    sync_experiment_state,
+)
 
 
-DECISIONS = {"pending", "adopt", "reject", "iterate", "inconclusive"}
 EXPERIMENT_MODULE_PREFIX = "ml_project.experiments."
 
 
@@ -68,6 +75,16 @@ def load_experiment(
         raise TypeError(f"{module_name}.prepare_candidate_data must be callable")
     if not callable(build_models):
         raise TypeError(f"{module_name}.build_candidate_models must be callable")
+    project_root = next(
+        (
+            parent
+            for parent in source_path.parents
+            if (parent / "src/ml_project").is_dir()
+        ),
+        None,
+    )
+    if project_root is not None:
+        settings = settings_with_card_decision(project_root, settings)
     return ExperimentDefinition(
         module_name=module_name,
         source_path=source_path,
@@ -214,7 +231,7 @@ def _run_prepare_hook(
     definition: ExperimentDefinition,
     frame: pd.DataFrame,
     feature_groups: Mapping[str, Any],
-    settings: BaselineSettings,
+    settings: ModelingSettings,
 ) -> ExperimentData:
     prepared = definition.prepare_data(
         frame.copy(deep=True),
@@ -233,15 +250,15 @@ def prepare_experiment_parent(
     definition: ExperimentDefinition,
     train: pd.DataFrame,
     feature_groups: Mapping[str, Any],
-    baseline_settings: BaselineSettings,
+    initial_settings: ModelingSettings,
 ) -> ExperimentData:
-    """Apply every adopted ancestor data hook, oldest parent first."""
+    """Собрать reference из EXP-001 и всех принятых parent-экспериментов."""
 
     return prepare_reference_experiment_data(
         definition.settings.parent_experiment_module,
         train,
         feature_groups,
-        baseline_settings,
+        initial_settings,
     )
 
 
@@ -249,15 +266,15 @@ def prepare_reference_experiment_data(
     parent_experiment_module: str | None,
     train: pd.DataFrame,
     feature_groups: Mapping[str, Any],
-    baseline_settings: BaselineSettings,
+    initial_settings: ModelingSettings,
 ) -> ExperimentData:
-    """Prepare the complete baseline/adopted-parent reference data recipe."""
+    """Вернуть данные и ModelingSettings эффективного reference."""
 
     if parent_experiment_module is None:
         return ExperimentData(
             frame=train.copy(deep=True),
             feature_groups=copy.deepcopy(feature_groups),
-            settings=baseline_settings,
+            settings=initial_settings,
             diagnostics={},
         )
     parent = load_experiment(parent_experiment_module)
@@ -270,7 +287,7 @@ def prepare_reference_experiment_data(
     context = ExperimentData(
         frame=train.copy(deep=True),
         feature_groups=copy.deepcopy(feature_groups),
-        settings=baseline_settings,
+        settings=initial_settings,
         diagnostics={},
     )
     stack = [*reversed(resolve_experiment_lineage(parent)), parent]
@@ -288,15 +305,15 @@ def prepare_experiment_candidate(
     definition: ExperimentDefinition,
     train: pd.DataFrame,
     feature_groups: Mapping[str, Any],
-    baseline_settings: BaselineSettings,
+    initial_settings: ModelingSettings,
 ) -> ExperimentData:
-    """Apply adopted parent data hooks and then the selected experiment hook."""
+    """Применить reference-цепочку, затем hook выбранного candidate."""
 
     parent = prepare_experiment_parent(
         definition,
         train,
         feature_groups,
-        baseline_settings,
+        initial_settings,
     )
     return _run_prepare_hook(
         definition,
@@ -309,7 +326,7 @@ def prepare_experiment_candidate(
 def build_reference_pipeline(
     parent_experiment_module: str | None,
     preprocessor: Any,
-    settings: BaselineSettings,
+    settings: ModelingSettings,
 ) -> Any:
     """Build baseline or the exact primary candidate of an adopted parent."""
 
@@ -333,7 +350,7 @@ def build_reference_pipeline(
 def build_experiment_reference(
     definition: ExperimentDefinition,
     preprocessor: Any,
-    settings: BaselineSettings,
+    settings: ModelingSettings,
 ) -> Any:
     """Build the selected experiment's explicit baseline/champion reference."""
 
@@ -347,7 +364,7 @@ def build_experiment_reference(
 def build_experiment_candidates(
     definition: ExperimentDefinition,
     preprocessor: Any,
-    candidate_settings: BaselineSettings,
+    candidate_settings: ModelingSettings,
 ) -> dict[str, Any]:
     """Run the experiment-owned model hook and normalize its mapping."""
 
@@ -509,12 +526,12 @@ def success_criteria_report(
     return pd.DataFrame(rows)
 
 
-def _effective_baseline_settings(
-    baseline_settings: BaselineSettings,
+def _effective_run_settings(
+    candidate_settings: ModelingSettings,
     experiment_settings: ExperimentSettings,
-) -> BaselineSettings:
+) -> ModelingSettings:
     return replace(
-        baseline_settings,
+        candidate_settings,
         experiment_id=experiment_settings.experiment_id,
         experiment_title=experiment_settings.experiment_title,
         experiment_note=experiment_settings.experiment_note,
@@ -533,7 +550,7 @@ def _effective_baseline_settings(
 def save_experiment_run(
     project_root: Path,
     experiment_settings: ExperimentSettings,
-    baseline_settings: BaselineSettings,
+    candidate_settings: ModelingSettings,
     evaluation: CVEvaluation,
     candidate_plan: FeaturePlan,
     scoring: ScoringPlan,
@@ -545,13 +562,17 @@ def save_experiment_run(
     metric_figures: Mapping[str, Any] | None = None,
     definition: ExperimentDefinition | None = None,
 ) -> SavedBaselineRun:
-    """Save generic experiment outputs using the proven baseline artifact layer."""
+    """Сохранить результат с фактическими ModelingSettings candidate."""
+
+    experiment_settings = settings_with_card_decision(
+        project_root, experiment_settings
+    )
 
     validate_model_contract(
         {key: value for key, value in models.items() if key != experiment_settings.reference_model},
         experiment_settings,
     )
-    effective = _effective_baseline_settings(baseline_settings, experiment_settings)
+    effective = _effective_run_settings(candidate_settings, experiment_settings)
     saved = modeling_tools.save_baseline_run(
         project_root,
         effective,
@@ -657,6 +678,130 @@ def _lineage_markdown(
     return " → ".join(links)
 
 
+def _build_diagnostics_report(
+    project_root: Path,
+    diagnostics: ExperimentDiagnostics,
+    saved: SavedDiagnostics,
+) -> str:
+    focus = pd.DataFrame(
+        [
+            {
+                "Изменение": "добавлен в candidate",
+                "Признак": feature,
+            }
+            for feature in diagnostics.focus_features
+        ]
+        + [
+            {
+                "Изменение": "исключён относительно reference",
+                "Признак": feature,
+            }
+            for feature in diagnostics.removed_features
+        ]
+    )
+    if focus.empty:
+        focus = pd.DataFrame(
+            [{"Изменение": "feature plan не изменился", "Признак": "—"}]
+        )
+
+    paired = (
+        diagnostics.paired_fold_deltas.groupby(
+            ["metric", "direction"], as_index=False, sort=False
+        )
+        .agg(
+            mean_improvement=("improvement", "mean"),
+            std_improvement=("improvement", "std"),
+            min_improvement=("improvement", "min"),
+            max_improvement=("improvement", "max"),
+        )
+        .rename(
+            columns={
+                "metric": "Метрика",
+                "direction": "Направление",
+                "mean_improvement": "Средний paired Δ",
+                "std_improvement": "Std paired Δ",
+                "min_improvement": "Min paired Δ",
+                "max_improvement": "Max paired Δ",
+            }
+        )
+    )
+    changes = diagnostics.prediction_changes.rename(
+        columns={
+            "outcome_change": "Переход",
+            "rows": "Строк",
+            "share": "Доля",
+        }
+    )
+    permutation = diagnostics.permutation_importance
+    if permutation.empty:
+        permutation_summary = pd.DataFrame(
+            [{"Признак": "—", "Mean importance": np.nan, "Std": np.nan}]
+        )
+    else:
+        permutation_summary = (
+            permutation.groupby("feature", as_index=False)
+            .agg(
+                mean_importance=("importance_mean", "mean"),
+                std_importance=("importance_mean", "std"),
+            )
+            .sort_values("mean_importance", ascending=False)
+            .head(15)
+            .rename(
+                columns={
+                    "feature": "Признак",
+                    "mean_importance": "Mean importance",
+                    "std_importance": "Std",
+                }
+            )
+        )
+
+    parts = [
+        "## Диагностика candidate",
+        "> [!info] Граница интерпретации\n> Диагностика использует fitted-модели тех же CV-folds. Importance описывает предсказания модели, а не причинный эффект признака.",
+        "### Контролируемое изменение\n\n" + dataframe_to_markdown(focus),
+        "### Путь данных по candidate pipeline\n\n"
+        + dataframe_to_markdown(
+            diagnostics.pipeline_stages.rename(
+                columns={
+                    "stage": "Этап",
+                    "transformer": "Transformer",
+                    "rows": "Строк",
+                    "columns": "Колонок",
+                    "sparse": "Sparse",
+                    "density": "Плотность",
+                    "missing_cells": "Пропусков",
+                }
+            ),
+            float_digits=4,
+        ),
+        "### Paired Δ на одинаковых folds\n\n"
+        + dataframe_to_markdown(paired, float_digits=4),
+        "### Изменение OOF-ошибок\n\n"
+        + dataframe_to_markdown(changes, float_digits=4),
+        "### Validation permutation importance candidate\n\n"
+        + dataframe_to_markdown(permutation_summary, float_digits=4),
+    ]
+    for figure_path in saved.figure_paths.values():
+        parts.append(f"![[{_vault_relative(project_root, figure_path)}]]")
+    if diagnostics.warnings:
+        parts.append(
+            "> [!warning] Ограничения диагностики\n> "
+            + "\n> ".join(diagnostics.warnings)
+        )
+    diagnostic_rel = _vault_relative(project_root, saved.artifact_dir)
+    parts.append(
+        "### Диагностические таблицы\n\n"
+        + "\n".join(
+            f"- [[{diagnostic_rel}/{path.name}|{path.name}]]"
+            for path in saved.table_paths.values()
+        )
+    )
+    parts.append(
+        "Подробный интерактивный разбор: [[notebooks/05_diagnostics.ipynb|05_diagnostics.ipynb]]."
+    )
+    return "\n\n".join(parts)
+
+
 def build_experiment_report(
     project_root: Path,
     settings: ExperimentSettings,
@@ -667,6 +812,8 @@ def build_experiment_report(
     dataset_version: str,
     cv_description: str,
     definition: ExperimentDefinition | None = None,
+    diagnostics: ExperimentDiagnostics | None = None,
+    saved_diagnostics: SavedDiagnostics | None = None,
 ) -> str:
     comparison = comparison_summary(
         evaluation, scoring, reference_model=settings.reference_model
@@ -754,6 +901,14 @@ def build_experiment_report(
             ]
         )
         sections.append("\n\n".join(parts))
+    if diagnostics is not None and saved_diagnostics is not None:
+        sections.append(
+            _build_diagnostics_report(
+                project_root,
+                diagnostics,
+                saved_diagnostics,
+            )
+        )
     run_rel = _vault_relative(project_root, saved.run_dir)
     artifact_lines = [
         f"- [[{run_rel}/cv_fold_scores.csv|cv_fold_scores.csv]]",
@@ -798,8 +953,11 @@ def sync_experiment_note(
     dataset_version: str,
     cv_description: str,
     definition: ExperimentDefinition | None = None,
+    diagnostics: ExperimentDiagnostics | None = None,
+    saved_diagnostics: SavedDiagnostics | None = None,
 ) -> list[str]:
     root = Path(project_root).resolve()
+    settings = settings_with_card_decision(root, settings)
     note_path = (root / settings.experiment_note).resolve()
     _vault_relative(root, note_path)
     note_path.parent.mkdir(parents=True, exist_ok=True)
@@ -815,6 +973,7 @@ def sync_experiment_note(
             f"hypothesis: {yaml_string(settings.hypothesis)}\n"
             f"primary_metric: {yaml_string(scoring.contract_metric)}\n"
             f"decision: {settings.decision}\n"
+            "eda_findings: []\n"
             "---\n\n"
             f"# {settings.experiment_id} — {settings.experiment_title}\n\n"
             "← [[experiments/_index.md|Реестр]] · [[docs/05_experiments.md|Эксперименты]]\n\n"
@@ -823,6 +982,10 @@ def sync_experiment_note(
             "<!-- auto:experiment-report:start -->\n\n"
             "Отчёт появится после сохранения запуска.\n\n"
             "<!-- auto:experiment-report:end -->\n\n"
+            "## EDA-основания\n\n"
+            "<!-- auto:experiment-eda-links:start -->\n\n"
+            "> Добавьте EDA ID в `eda_findings` во frontmatter карточки.\n\n"
+            "<!-- auto:experiment-eda-links:end -->\n\n"
             "## Анализ результата — заполнить вручную\n\n"
             "- **Что произошло:**\n"
             "- **Подтвердилась ли гипотеза:**\n"
@@ -830,8 +993,9 @@ def sync_experiment_note(
             "- **Стабильность по folds / seeds:**\n"
             "- **Ограничения и возможный leakage:**\n\n"
             "## Обоснование решения — заполнить вручную\n\n"
-            "> Машинный source of truth для decision находится в модуле "
-            "эксперимента; карточка и registry синхронизируются из него.\n\n"
+            "> Source of truth для `decision` — поле во frontmatter этой "
+            "карточки. После изменения запустите "
+            "`sync-experiment-state.cmd`; переобучение не требуется.\n\n"
             "- **Почему выбрано это решение:**\n"
             "- **Следующий шаг:**\n",
             encoding="utf-8",
@@ -842,15 +1006,20 @@ def sync_experiment_note(
             "status": "completed",
             "hypothesis": json.dumps(settings.hypothesis, ensure_ascii=False),
             "primary_metric": json.dumps(scoring.contract_metric, ensure_ascii=False),
-            "decision": settings.decision,
         },
     )
     report = build_experiment_report(
         root, settings, evaluation, scoring, saved,
         dataset_version=dataset_version, cv_description=cv_description,
         definition=definition,
+        diagnostics=diagnostics,
+        saved_diagnostics=saved_diagnostics,
     )
-    return MarkdownDocument(note_path).update_blocks({"experiment-report": report})
+    updated = MarkdownDocument(note_path).update_blocks(
+        {"experiment-report": report}
+    )
+    sync_experiment_eda_relations(root)
+    return updated
 
 
 def _registry_row(
@@ -938,12 +1107,13 @@ def sync_experiment_docs(
     scoring: ScoringPlan,
     *,
     dataset_version: str,
-    baseline_settings: BaselineSettings | None = None,
+    initial_settings: ModelingSettings | None = None,
     definition: ExperimentDefinition | None = None,
 ) -> dict[str, Any]:
     """Upsert the registry and refresh experiment and README leaderboards."""
 
     root = Path(project_root).resolve()
+    settings = settings_with_card_decision(root, settings)
     registry_path = (root / settings.results_registry).resolve()
     _vault_relative(root, registry_path)
     registry_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1014,8 +1184,8 @@ def sync_experiment_docs(
         }
     )
     baseline_note = (
-        baseline_settings.experiment_note
-        if baseline_settings is not None
+        initial_settings.experiment_note
+        if initial_settings is not None
         else Path("experiments/EXP-001 Baseline.md")
     )
     baseline_rows = registry[
@@ -1049,8 +1219,8 @@ def sync_experiment_docs(
                 baseline_note,
                 registry,
                 baseline_run=(
-                    baseline_settings.run_name
-                    if baseline_settings is not None
+                    initial_settings.run_name
+                    if initial_settings is not None
                     else "baseline"
                 ),
                 baseline_metric=str(row["primary_metric"]),
@@ -1068,11 +1238,13 @@ def sync_experiment_docs(
             )
         }
     )
+    state = sync_experiment_state(root)
     return {
         "registry": settings.results_registry.as_posix(),
         "blocks": blocks,
         "registry_blocks": registry_blocks,
         "readme_blocks": readme_blocks,
+        "state": state,
     }
 
 
@@ -1095,7 +1267,9 @@ __all__ = [
     "settings_report",
     "success_criteria_report",
     "sync_experiment_docs",
+    "sync_experiment_eda_relations",
     "sync_experiment_note",
+    "sync_experiment_state",
     "validate_model_contract",
     "validate_settings",
 ]
