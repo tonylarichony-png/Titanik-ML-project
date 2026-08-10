@@ -43,6 +43,7 @@ entity: experiment
 | [[experiments/EXP-010 Pclassxsex.md\|EXP-010 — Объединение признака pcclass и Sex  в один]]                                                    | exp_010_v1 | accuracy |    0.8148 | reject    |
 | [[experiments/EXP-011 Sexplcass V2.md\|EXP-011 — SexPlcass_V2]]                                                                                | exp_011_v1 | accuracy |    0.8148 | reject    |
 | [[experiments/EXP-012 Exp 005 Ticketgroupsize.md\|EXP-012 — EXP-005+ticketGroupSize]]                                                          | exp_012_v1 | accuracy |    0.8137 | reject    |
+| [[experiments/EXP-013 Tt Comb.md\|EXP-013 — Train_test_combine]]                                                                               | exp_013_v1 | accuracy |    0.8126 | adopt     |
 
 <!-- auto:experiment-registry:end -->
 

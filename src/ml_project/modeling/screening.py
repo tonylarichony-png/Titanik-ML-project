@@ -286,7 +286,10 @@ def _pipeline_shell(
             preprocessor,
             build_simple_estimator(effective_settings),
         )
-    definition = load_experiment(context.feature_reference_module)
+    definition = load_experiment(
+        context.feature_reference_module,
+        reload_module=False,
+    )
     if definition.source_sha256 != context.feature_reference_sha256:
         raise RuntimeError(
             "Feature reference code changed after context preparation; reload the notebook"
@@ -297,6 +300,40 @@ def _pipeline_shell(
         effective_settings,
     )
     return candidates[definition.settings.primary_candidate]
+
+
+def build_screening_candidate_pipeline(
+    context: ModelScreeningContext,
+    group: ModelGroupSettings,
+    model_id: str,
+    params: Mapping[str, Any],
+) -> Any:
+    """Rebuild one screening candidate with its recorded preprocessing profile."""
+
+    effective_settings = settings_for_preprocessing_profile(
+        context.settings,
+        group.preprocessing_profile,
+    )
+    shell = _pipeline_shell(
+        context,
+        effective_settings,
+        group.preprocessing_profile,
+    )
+    try:
+        from sklearn.base import clone
+    except ImportError as error:  # pragma: no cover - environment dependent
+        raise ImportError("Model screening requires scikit-learn") from error
+    if "model" not in getattr(shell, "named_steps", {}):
+        raise ValueError("Feature reference pipeline must expose a final 'model' step")
+    estimator = build_screening_estimator(
+        model_id,
+        effective_settings,
+        params,
+        categorical_features=context.plan.categorical,
+    )
+    pipeline = clone(shell)
+    pipeline.set_params(model=estimator)
+    return pipeline
 
 
 def build_model_group(
@@ -499,6 +536,7 @@ def run_model_screening(
 
 
 __all__ = [
+    "build_screening_candidate_pipeline",
     "build_model_group",
     "configured_models_report",
     "prepare_screening_context",

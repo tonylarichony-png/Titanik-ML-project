@@ -20,6 +20,7 @@ from .contracts import (
     SavedModelScreening,
 )
 from .screening import validate_screening_settings
+from .screening_diagnostics import build_staged_log_loss_diagnostics
 
 
 TRACKED_SCREENING_FIGURE_ROOT = Path("assets/model-screening")
@@ -99,6 +100,65 @@ def build_screening_figures(
         axis.grid(axis="x", alpha=0.25)
         figure.tight_layout()
         figures[f"importance-{diagnostic_model}.png"] = figure
+
+    loss_rows = build_staged_log_loss_diagnostics(
+        result.evaluation,
+        result.built.context.data,
+    )
+    loss_models = loss_rows["model"].drop_duplicates().tolist()
+    if loss_models:
+        figure, axes = plt.subplots(
+            1,
+            len(loss_models),
+            figsize=(6.2 * len(loss_models), 4.8),
+            squeeze=False,
+            sharey=True,
+        )
+        colors = {"train": "#64748b", "validation": "#2563eb"}
+        for axis, model_name in zip(axes.ravel(), loss_models):
+            model_rows = loss_rows[loss_rows["model"].eq(model_name)]
+            summary = (
+                model_rows.groupby(["split", "iteration"], as_index=False)
+                .agg(
+                    loss_mean=("log_loss", "mean"),
+                    loss_std=("log_loss", "std"),
+                )
+                .fillna({"loss_std": 0.0})
+            )
+            for split in ("train", "validation"):
+                split_rows = summary[summary["split"].eq(split)]
+                axis.plot(
+                    split_rows["iteration"],
+                    split_rows["loss_mean"],
+                    label=split,
+                    color=colors[split],
+                    linewidth=2.0,
+                )
+                axis.fill_between(
+                    split_rows["iteration"],
+                    split_rows["loss_mean"] - split_rows["loss_std"],
+                    split_rows["loss_mean"] + split_rows["loss_std"],
+                    color=colors[split],
+                    alpha=0.10,
+                )
+            validation = summary[summary["split"].eq("validation")]
+            best = validation.loc[validation["loss_mean"].idxmin()]
+            best_iteration = int(best["iteration"])
+            axis.axvline(
+                best_iteration,
+                color="#dc2626",
+                linestyle="--",
+                linewidth=1.2,
+                label=f"best validation: {best_iteration}",
+            )
+            axis.set_title(str(model_name))
+            axis.set_xlabel("Boosting iteration")
+            axis.grid(alpha=0.22)
+            axis.legend(frameon=False, fontsize=9)
+        axes[0, 0].set_ylabel("Log loss (mean ± std across CV folds)")
+        figure.suptitle("Train and validation loss", fontsize=13)
+        figure.tight_layout(rect=(0, 0, 1, 0.94))
+        figures["boosting-log-loss.png"] = figure
     return figures
 
 
@@ -250,6 +310,123 @@ def _ensure_note(path: Path, settings: ModelScreeningSettings, feature_id: str) 
     )
 
 
+def _screening_stage_blocks(registry: pd.DataFrame) -> dict[str, str]:
+    """Build a concise one-row-per-screening overview for stage 05."""
+
+    runs: list[dict[str, Any]] = []
+    for screening_id, rows in registry.groupby("screening_id", sort=False):
+        ranked = rows.assign(
+            _rank=pd.to_numeric(rows["rank"], errors="coerce"),
+            _mean=pd.to_numeric(rows["mean"], errors="coerce"),
+            _std=pd.to_numeric(rows["std"], errors="coerce"),
+            _delta=pd.to_numeric(
+                rows["improvement_vs_reference"], errors="coerce"
+            ),
+        ).sort_values("_rank", kind="stable")
+        winner = ranked.iloc[0]
+
+        reference_id = "feature_champion"
+        if "reference_model" in ranked:
+            configured = ranked["reference_model"].dropna()
+            if not configured.empty:
+                reference_id = str(configured.iloc[0])
+        reference = ranked[ranked["model"].astype(str).eq(reference_id)]
+        if reference.empty:
+            reference = ranked.loc[[ranked["_delta"].abs().idxmin()]]
+            reference_id = str(reference.iloc[0]["model"])
+        reference_row = reference.iloc[0]
+
+        shortlisted = ranked[
+            ranked["shortlisted"]
+            .astype(str)
+            .str.strip()
+            .str.casefold()
+            .isin({"true", "1", "yes"})
+        ]["model"].astype(str).tolist()
+        note = str(winner["note"])
+        link = f"[[{note}|{screening_id}]]"
+        runs.append(
+            {
+                "screening_id": str(screening_id),
+                "link": link,
+                "title": str(winner["title"]),
+                "feature_reference": str(winner["feature_reference"]),
+                "group": str(winner["group"]),
+                "winner": str(winner["model"]),
+                "metric": str(winner["primary_metric"]),
+                "reference_model": reference_id,
+                "reference_mean": float(reference_row["_mean"]),
+                "winner_mean": float(winner["_mean"]),
+                "winner_std": float(winner["_std"]),
+                "delta": float(winner["_delta"]),
+                "shortlist": ", ".join(shortlisted) or "—",
+                "candidate_count": max(len(ranked) - 1, 0),
+            }
+        )
+
+    latest = runs[-1]
+    latest_frame = pd.DataFrame(
+        [
+            {"Поле": "Screening", "Значение": f"{latest['link']} — {latest['title']}"},
+            {"Поле": "Feature set", "Значение": latest["feature_reference"]},
+            {"Поле": "Группа", "Значение": latest["group"]},
+            {"Поле": "Проверено кандидатов", "Значение": latest["candidate_count"]},
+            {"Поле": "Метрика", "Значение": latest["metric"]},
+            {
+                "Поле": "Reference",
+                "Значение": (
+                    f"{latest['reference_model']}: "
+                    f"{latest['reference_mean']:.4f}"
+                ),
+            },
+            {
+                "Поле": "Лидер",
+                "Значение": (
+                    f"{latest['winner']}: {latest['winner_mean']:.4f} "
+                    f"± {latest['winner_std']:.4f}"
+                ),
+            },
+            {"Поле": "Δ к reference", "Значение": f"{latest['delta']:+.4f}"},
+            {"Поле": "Shortlist", "Значение": latest["shortlist"]},
+        ]
+    )
+    overview = pd.DataFrame(
+        [
+            {
+                "Screening": run["link"],
+                "Feature set": run["feature_reference"],
+                "Группа": run["group"],
+                "Лидер": run["winner"],
+                "Метрика": run["metric"],
+                "Reference": run["reference_mean"],
+                "Лучший": run["winner_mean"],
+                "Δ": f"{run['delta']:+.4f}",
+                "Shortlist": run["shortlist"],
+            }
+            for run in runs
+        ]
+    )
+    return {
+        "latest-model-screening": dataframe_to_markdown(
+            latest_frame, float_digits=4
+        ),
+        "model-screening-summary": dataframe_to_markdown(
+            overview, float_digits=4
+        ),
+    }
+
+
+def _sync_screening_stage_summary(root: Path, registry: pd.DataFrame) -> None:
+    """Update stage 05 when that project report is present."""
+
+    stage_path = root / "docs/05_experiments.md"
+    if not stage_path.exists() or registry.empty:
+        return
+    MarkdownDocument(stage_path).update_blocks(
+        _screening_stage_blocks(registry)
+    )
+
+
 def _sync_registry(
     root: Path,
     result: ModelScreeningResult,
@@ -268,8 +445,13 @@ def _sync_registry(
                 "title": settings.screening_title,
                 "note": settings.screening_note.as_posix(),
                 "feature_reference": result.built.context.feature_reference_id,
+                "feature_reference_module": (
+                    result.built.context.feature_reference_module or ""
+                ),
                 "feature_module_sha256": result.built.context.feature_reference_sha256 or "",
                 "group": settings.active_group,
+                "preprocessing_profile": result.built.group.preprocessing_profile,
+                "reference_model": settings.reference_model_id,
                 "model": item["model"],
                 "primary_metric": item["metric"],
                 "direction": item["direction"],
@@ -336,6 +518,7 @@ def _sync_registry(
     MarkdownDocument(index_path).update_blocks(
         {"model-screening-registry": dataframe_to_markdown(summary, float_digits=4)}
     )
+    _sync_screening_stage_summary(root, registry)
     return path
 
 

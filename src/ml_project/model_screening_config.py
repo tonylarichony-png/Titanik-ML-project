@@ -72,12 +72,21 @@ MODEL_GROUPS = {
             ScreeningModelSpec(
                 model_id="hist_gradient_boosting",
                 label="Histogram gradient boosting",
-                params={"learning_rate": 0.06, "max_iter": 250, "max_leaf_nodes": 15},
+                params={"learning_rate": 0.04,
+                        "max_iter": 250,
+                        "max_leaf_nodes": 15,
+                        "early_stopping": True,
+                        "n_iter_no_change": 10,
+                        "validation_fraction": 0.1,
+                        },
             ),
             ScreeningModelSpec(
                 model_id="gradient_boosting",
                 label="Gradient boosting",
-                params={"n_estimators": 250, "learning_rate": 0.04, "max_depth": 2},
+                params={"n_estimators": 300,
+                        "learning_rate": 0.03,
+                        "max_depth": 2
+                        },
             ),
         ),
     ),
@@ -135,24 +144,24 @@ MODEL_GROUPS = {
 
 SCREENING = ModelScreeningSettings(
     # Новый ID нужен для каждого официально сохранённого группового прогона.
-    screening_id="MS-001",
-    screening_title="Tree and bagging screening on EXP-003 features",
-    screening_note=Path("model-screening/MS-001 Tree Bagging.md"),
+    screening_id="MS-004",
+    screening_title="sklearn_boosting with early stopping and validation on EXP-013 TT-combined features",
+    screening_note=Path("model-screening/MS-004 sklearn_boosting.md"),
 
     # Feature set фиксируется модулем принятого чемпиона; EXP-003 включает
     # также всю принятую parent-цепочку EXP-001 → EXP-002 → EXP-003.
-    feature_reference_module="ml_project.experiments.exp_003_family_size",
+    feature_reference_module="ml_project.experiments.exp_013_tt_comb",
 
     # Для следующей группы меняются active_group, ID, title, note и run_name.
-    active_group="tree_bagging",
+    active_group="sklearn_boosting",
     groups=MODEL_GROUPS,
     reference_model_id="feature_champion",
 
     # Эта модель получает отдельный график агрегированной importance.
-    diagnostic_model_id="random_forest",
+    diagnostic_model_id="hist_gradient_boosting",
     shortlist_size=2,
 
-    run_name="ms_001_tree_bagging_v1",
+    run_name="ms_004_sklearn_boosting_v1",
     artifact_dir=Path("artifacts/model-screening"),
     results_registry=Path("model-screening/results.csv"),
     save_artifacts=True,

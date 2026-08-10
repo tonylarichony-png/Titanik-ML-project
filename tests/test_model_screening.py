@@ -103,6 +103,46 @@ def screening_for_test():
     )
 
 
+def boosting_screening_for_test():
+    group = ModelGroupSettings(
+        group_id="boosting_test",
+        title="Boosting",
+        preprocessing_profile="unscaled_dense",
+        models=(
+            ScreeningModelSpec(
+                "hist_gradient_boosting",
+                "Histogram boosting",
+                {
+                    "max_iter": 12,
+                    "learning_rate": 0.08,
+                    "max_leaf_nodes": 7,
+                    "min_samples_leaf": 5,
+                },
+            ),
+            ScreeningModelSpec(
+                "gradient_boosting",
+                "Gradient boosting",
+                {
+                    "n_estimators": 12,
+                    "learning_rate": 0.08,
+                    "max_depth": 2,
+                },
+            ),
+        ),
+    )
+    return replace(
+        screening_for_test(),
+        screening_id="MS-BOOST",
+        screening_title="Boosting loss test",
+        screening_note=Path("model-screening/MS-BOOST Boosting.md"),
+        active_group="boosting_test",
+        groups={"boosting_test": group},
+        diagnostic_model_id="hist_gradient_boosting",
+        shortlist_size=2,
+        run_name="ms_boost_v1",
+    )
+
+
 class ModelScreeningNotebookTests(unittest.TestCase):
     def test_notebook_has_valid_code_cells(self) -> None:
         path = Path(__file__).resolve().parents[1] / "notebooks/06_model_screening.ipynb"
@@ -123,6 +163,41 @@ class ModelScreeningNotebookTests(unittest.TestCase):
     "model screening requires scikit-learn",
 )
 class ModelScreeningTests(unittest.TestCase):
+    def test_boosting_screening_adds_one_compact_loss_figure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "docs").mkdir()
+            (root / "docs/00_problem.md").write_text(
+                "(primary_metric:: accuracy)\n",
+                encoding="utf-8",
+            )
+            settings = settings_for_test()
+            screening = boosting_screening_for_test()
+            context = screening_tools.prepare_screening_context(
+                root,
+                sample_frame(),
+                FEATURE_GROUPS,
+                target="target",
+                key="id",
+                initial_settings=settings,
+                feature_reference_module=None,
+            )
+            built = screening_tools.build_model_group(context, screening)
+            result = screening_tools.run_model_screening(root, built, screening)
+            figures = screening_tools.build_screening_figures(result, screening)
+
+            self.assertIn("boosting-log-loss.png", figures)
+            self.assertEqual(len(figures["boosting-log-loss.png"].axes), 2)
+            saved = screening_tools.save_model_screening(
+                root,
+                result,
+                screening,
+                dataset_version="test-data",
+                figures=figures,
+            )
+            note = saved.note_path.read_text(encoding="utf-8")
+            self.assertEqual(note.count("boosting-log-loss.png"), 1)
+
     def test_task_specific_params_support_regression_templates(self) -> None:
         regression = replace(settings_for_test(), task_type="regression")
         estimator = build_screening_estimator(
@@ -155,6 +230,16 @@ class ModelScreeningTests(unittest.TestCase):
             (root / "docs").mkdir()
             (root / "docs/00_problem.md").write_text(
                 "(primary_metric:: accuracy)\n", encoding="utf-8"
+            )
+            (root / "docs/05_experiments.md").write_text(
+                "# Experiments\n\n"
+                "<!-- auto:latest-model-screening:start -->\n"
+                "pending\n"
+                "<!-- auto:latest-model-screening:end -->\n\n"
+                "<!-- auto:model-screening-summary:start -->\n"
+                "pending\n"
+                "<!-- auto:model-screening-summary:end -->\n",
+                encoding="utf-8",
             )
             frame = sample_frame()
             settings = settings_for_test()
@@ -202,6 +287,10 @@ class ModelScreeningTests(unittest.TestCase):
             self.assertTrue(saved.note_path.is_file())
             self.assertTrue(saved.registry_path.is_file())
             self.assertTrue((root / "model-screening/_index.md").is_file())
+            stage = (root / "docs/05_experiments.md").read_text(encoding="utf-8")
+            self.assertIn("[[model-screening/MS-TEST Trees.md\\|MS-TEST]]", stage)
+            self.assertIn(str(result.leaderboard.iloc[0]["model"]), stage)
+            self.assertIn("Shortlist", stage)
             self.assertTrue(saved.figure_paths)
             self.assertTrue(all((root / path).is_file() for path in saved.figure_paths.values()))
             note = saved.note_path.read_text(encoding="utf-8")

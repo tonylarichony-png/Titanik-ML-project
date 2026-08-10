@@ -56,18 +56,18 @@ tags:
 
 <!-- auto:latest-experiment:start -->
 
-| Поле                | Значение                                                                                                                                                                                          |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Эксперимент         | [[experiments/EXP-012 Exp 005 Ticketgroupsize.md\|EXP-012 — EXP-005+ticketGroupSize]]                                                                                                             |
-| Родитель            | EXP-003                                                                                                                                                                                           |
-| Гипотеза            |  if создать группы по номеру билета и из за скошенность прологорифмировать, then точнее можно оценить стоимость билета на человека , because это лучше отражает действительноть, ценность билета! |
-| Изменение           | Создать переменную TicketGroup, которая будет группировать билеты по номеру билета,и рассчитать FarePerPerson и преобразовать log1p относительно EXP003 больше ничего не менять                   |
-| Метрика             | accuracy                                                                                                                                                                                          |
-| Reference           | 0.8204                                                                                                                                                                                            |
-| Кандидат            | 0.8137                                                                                                                                                                                            |
-| Δ к reference       | -0.0067                                                                                                                                                                                           |
-| Формальные критерии | failed                                                                                                                                                                                            |
-| Решение             | reject                                                                                                                                                                                            |
+| Поле                | Значение                                                                                                                                                                                   |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Эксперимент         | [[experiments/EXP-013 Tt Comb.md\|EXP-013 — Train_test_combine]]                                                                                                                           |
+| Родитель            | EXP-003                                                                                                                                                                                    |
+| Гипотеза            |  if я объединю датасеты , then улучшу метрики, потому что групповые признаки буду давать более точное представление!, because станет больше наблюдений для формирования групп признаков... |
+| Изменение           | ALL IN — применяем все изменения сразу+ объединяем train и test датасеты, относительно EXP012 больше ничего не менять                                                                      |
+| Метрика             | accuracy                                                                                                                                                                                   |
+| Reference           | 0.8204                                                                                                                                                                                     |
+| Кандидат            | 0.8126                                                                                                                                                                                     |
+| Δ к reference       | -0.0079                                                                                                                                                                                    |
+| Формальные критерии | failed                                                                                                                                                                                     |
+| Решение             | adopt                                                                                                                                                                                      |
 
 <!-- auto:latest-experiment:end -->
 
@@ -108,6 +108,7 @@ tags:
 | [[experiments/EXP-010 Pclassxsex.md\|EXP-010]]                                           | EXP-003 |  if сделаю категориальный признак SexPclass, then модели будет удобнее работать, because данный признак будет лучше отражать действительно так как зависимость нелинейная                                   | Объединить признаки Pclass и Sex в один приз                                                                                                                                    | accuracy |    0.8204 | 0.8148 | -0.0056 |    False | reject   |
 | [[experiments/EXP-011 Sexplcass V2.md\|EXP-011]]                                         | EXP-003 |  if сделаю категориальный признак SexPclass, then модели будет удобнее работать, because данный признак будет лучше отражать действительно так как зависимость нелинейная                                   | Объединить признаки Pclass и Sex в один приз                                                                                                                                    | accuracy |    0.8204 | 0.8148 | -0.0056 |    False | reject   |
 | [[experiments/EXP-012 Exp 005 Ticketgroupsize.md\|EXP-012]]                              | EXP-003 |  if создать группы по номеру билета и из за скошенность прологорифмировать, then точнее можно оценить стоимость билета на человека , because это лучше отражает действительноть, ценность билета!           | Создать переменную TicketGroup, которая будет группировать билеты по номеру билета,и рассчитать FarePerPerson и преобразовать log1p относительно EXP003 больше ничего не менять | accuracy |    0.8204 | 0.8137 | -0.0067 |    False | reject   |
+| [[experiments/EXP-013 Tt Comb.md\|EXP-013]]                                              | EXP-003 |  if я объединю датасеты , then улучшу метрики, потому что групповые признаки буду давать более точное представление!, because станет больше наблюдений для формирования групп признаков...                  | ALL IN — применяем все изменения сразу+ объединяем train и test датасеты, относительно EXP012 больше ничего не менять                                                           | accuracy |    0.8204 | 0.8126 | -0.0079 |    False | adopt    |
 
 <!-- auto:experiment-leaderboard:end -->
 
@@ -125,6 +126,41 @@ MS-запуски ведутся в отдельном [[model-screening/_index.
 смотреть не только на mean, но и на std, paired wins/losses, OOF-переходы ошибок
 и стоимость fit. Лучшие стартовые конфигурации переходят в shortlist, затем в
 coarse tuning; новый champion на этапе screening автоматически не назначается.
+
+### Последний сохранённый screening
+
+<!-- auto:latest-model-screening:start -->
+
+| Поле                 | Значение                                                                                                                                     |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Screening            | [[model-screening/MS-004 sklearn_boosting.md\|MS-004]] — sklearn_boosting with early stopping and validation on EXP-013 TT-combined features |
+| Feature set          | EXP-013                                                                                                                                      |
+| Группа               | sklearn_boosting                                                                                                                             |
+| Проверено кандидатов | 2                                                                                                                                            |
+| Метрика              | accuracy                                                                                                                                     |
+| Reference            | feature_champion: 0.8126                                                                                                                     |
+| Лидер                | hist_gradient_boosting: 0.8350 ± 0.0213                                                                                                      |
+| Δ к reference        | +0.0224                                                                                                                                      |
+| Shortlist            | hist_gradient_boosting, gradient_boosting                                                                                                    |
+
+<!-- auto:latest-model-screening:end -->
+
+### Сводка screening
+
+<!-- auto:model-screening-summary:start -->
+
+| Screening                                              | Feature set | Группа           | Лидер                  | Метрика  | Reference | Лучший | Δ       | Shortlist                                 |
+| ------------------------------------------------------ | ----------- | ---------------- | ---------------------- | -------- | --------: | -----: | ------- | ----------------------------------------- |
+| [[model-screening/MS-001 Tree Bagging.md\|MS-001]]     | EXP-003     | tree_bagging     | random_forest          | accuracy |    0.8204 | 0.8227 | +0.0022 | random_forest, extra_trees                |
+| [[model-screening/MS-002 Tree Bagging.md\|MS-002]]     | EXP-013     | tree_bagging     | random_forest          | accuracy |    0.8126 | 0.8182 | +0.0056 | random_forest, decision_tree              |
+| [[model-screening/MS-003 sklearn_boosting.md\|MS-003]] | EXP-013     | sklearn_boosting | gradient_boosting      | accuracy |    0.8126 | 0.8372 | +0.0247 | gradient_boosting, hist_gradient_boosting |
+| [[model-screening/MS-004 sklearn_boosting.md\|MS-004]] | EXP-013     | sklearn_boosting | hist_gradient_boosting | accuracy |    0.8126 | 0.8350 | +0.0224 | hist_gradient_boosting, gradient_boosting |
+
+<!-- auto:model-screening-summary:end -->
+
+> [!tip]
+> Здесь одна строка соответствует одному MS-запуску. Подробные результаты всех
+> моделей, paired folds и параметры остаются в [[model-screening/_index.md|реестре screening]].
 
 ## Очередь
 

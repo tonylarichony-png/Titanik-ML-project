@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -225,6 +226,24 @@ class MarkdownDocumentTests(unittest.TestCase):
                 result,
             )
             self.assertNotIn("\nold\n", result)
+
+    def test_windows_lock_falls_back_to_in_place_write(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "report.md"
+            path.write_text(
+                "<!-- auto:test:start -->\nold\n<!-- auto:test:end -->\n",
+                encoding="utf-8",
+            )
+
+            with patch(
+                "ml_project.docsync.os.replace",
+                side_effect=PermissionError("destination is open"),
+            ):
+                updated = MarkdownDocument(path).update_blocks({"test": "new"})
+
+            self.assertEqual(updated, ["test"])
+            self.assertIn("\n\nnew\n\n", path.read_text(encoding="utf-8"))
+            self.assertFalse(path.with_suffix(".md.tmp").exists())
 
 
 class EdaFindingTests(unittest.TestCase):

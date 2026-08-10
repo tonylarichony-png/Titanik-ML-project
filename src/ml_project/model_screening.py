@@ -1,6 +1,7 @@
 """Stable public facade for notebook-first grouped model screening."""
 
 from .modeling.screening import (
+    build_screening_candidate_pipeline,
     build_model_group,
     configured_models_report,
     prepare_screening_context,
@@ -16,6 +17,7 @@ from .modeling.screening_reporting import (
 
 __all__ = [
     "TRACKED_SCREENING_FIGURE_ROOT",
+    "build_screening_candidate_pipeline",
     "build_model_group",
     "build_screening_figures",
     "configured_models_report",

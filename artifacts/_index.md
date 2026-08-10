@@ -48,3 +48,10 @@ paired deltas, importance, параметры и metadata в
 `artifacts/model-screening/<RUN_NAME>/`. Карточка и компактный registry хранятся
 в `model-screening/`, а Git-tracked графики — в
 `assets/model-screening/<MS-ID>/`.
+
+## Kaggle submissions
+
+[[notebooks/07_submission.ipynb]] сохраняет CSV, fitted pipeline и metadata в
+`artifacts/submissions/<SUB-ID>/`. Эти файлы локальны и не попадают в Git.
+Воспроизводимый контракт, SHA-256 CSV и вручную заполненный Kaggle score
+хранятся в tracked-карточке и [[submissions/_index.md|реестре submissions]].

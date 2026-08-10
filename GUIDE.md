@@ -65,6 +65,8 @@ Project Dashboard ([[README.md]])
 | Разбор пути признака, importance и OOF-ошибок | [[notebooks/05_diagnostics.ipynb]] |
 | Групповой выбор семейства на лучшем feature set | [[notebooks/06_model_screening.ipynb]] |
 | Группы и стартовые гиперпараметры | `src/ml_project/model_screening_config.py` |
+| Full-train fit и Kaggle CSV выбранного EXP/MS-кандидата | [[notebooks/07_submission.ipynb]] |
+| История отправленных файлов и Public score | [[submissions/_index.md]] |
 | Синхронизация решений и Experiment ↔ EDA без переобучения | `sync-experiment-state.cmd` |
 | Сводка результатов | [[docs/05_experiments.md]] |
 | Системные ошибки модели | [[docs/06_error_analysis.md]] |
@@ -97,6 +99,7 @@ Project Dashboard ([[README.md]])
 | `screening.py` | Frozen feature context, сборка одной группы и одинаковый CV-run |
 | `screening_diagnostics.py` | OOF-сравнение и агрегированная native/coefficient importance |
 | `screening_reporting.py` | Графики, локальные таблицы, MS-карточка и отдельный registry |
+| `submission.py` | Каталог EXP/MS-кандидатов, inference audit, full-train fit, CSV и SUB-карточки |
 | `artifacts.py` | CSV, metadata, snapshot окружения, модели и Git-отслеживаемые графики |
 | `report_blocks.py` | Чистые генераторы Markdown-блоков для Validation, Features, README и реестров |
 | `reporting.py` | Карточка baseline и оркестрация синхронизации всех отчётов |
@@ -132,6 +135,7 @@ Project Dashboard ([[README.md]])
 - [[notebooks/04_experiment.ipynb]] автоматически применяет data-hooks всех принятых предков, пересчитывает champion reference и candidate на одинаковых folds и не использует старый CSV как модель. Metadata и карточка фиксируют цепочку модулей с SHA-256. Гипотеза, критерии и guardrails хранятся в модуле; изменяемое после интерпретации решение хранится во frontmatter карточки. Графики, таблицы, registry, leaderboard и ключевые результаты формируются автоматически.
 - Тот же запуск сохраняет диагностику одного primary candidate: fitted-модели и validation-индексы тех же folds, transformed lineage, paired Δ, permutation/native importance и OOF-переходы ошибок. [[notebooks/05_diagnostics.ipynb]] только читает эти артефакты и ничего не переобучает.
 - [[notebooks/06_model_screening.ipynb]] восстанавливает принятый feature champion из versioned experiment-модуля, оставляет validation contract неизменным и запускает только выбранную группу. Параметры заранее видны в `model_screening_config.py`; fitted folds сразу дают ranking, paired wins/losses, OOF-сравнение и importance. Финальная ячейка пишет локальные таблицы в `artifacts/model-screening/`, Git-tracked PNG в `assets/model-screening/<MS-ID>/`, отдельную карточку и [[model-screening/_index.md|реестр]].
+- [[notebooks/07_submission.ipynb]] показывает единый каталог baseline/EXP/MS-кандидатов и выбирает один устойчивым Candidate ID прямо в notebook. Перед full-train fit он восстанавливает точный pipeline, сверяет source hash и проверяет, что raw feature hook не зависит от состава окружающего DataFrame. CSV, fitted pipeline и metadata остаются локально в `artifacts/submissions/<SUB-ID>/`; tracked-карточка и Public score ведутся в [[submissions/_index.md]].
 - EDA-основания добавляются после запуска во frontmatter experiment-карточки: `eda_findings: ["EDA-003"]`. Команда `sync-experiment-state.cmd` проверяет существование ID, обновляет таблицы оснований и одновременно синхронизирует решение. Старое имя `sync-experiment-links.cmd` оставлено как совместимый alias. Связи и решение не меняют hash исполняемого Python-модуля.
 - Metadata и реестр фиксируют полный hash данных, путь и hash Python-модуля эксперимента, а metadata дополнительно фиксирует hash baseline-конфигурации. Это связывает измеренный результат не только с параметрами, но и с реально исполненным кодом.
 - Решение (`pending`, `adopt`, `reject`, `iterate`, `inconclusive`) меняется только в поле `decision:` frontmatter experiment-карточки. После `sync-experiment-state.cmd` оно попадает в generated-отчёт, все CSV registry и сводные документы без повторного обучения. Python-модуль после официального запуска для этого не редактируется.
@@ -325,6 +329,20 @@ feature reference, группа или параметры, сохранение 
 CV без параметров, std и paired-fold поведения недостаточно для окончательного
 выбора модели. PyTorch/DNN остаётся отдельной будущей веткой и в этот runner не
 включён.
+
+### Kaggle submission
+
+1. Выполнить каталог в [[notebooks/07_submission.ipynb]].
+2. В единственной редактируемой ячейке указать новый `SUB-ID` и Candidate ID.
+3. Прочитать восстановленный контракт и inference audit до fit.
+4. Обучить pipeline на полном train и проверить sample-aligned output.
+5. Явной финальной ячейкой сохранить CSV, model artifact, metadata и SUB-карточку.
+6. После ручной загрузки заполнить Public score в карточке.
+
+Для нового кандидата нужен новый `SUB-ID`. Повтор того же контракта идемпотентен,
+но смена source, данных, feature module или estimator под существующим ID
+блокируется. Reject-кандидат разрешён: решение эксперимента показывается как
+контекст, а техническая возможность inference определяется отдельным audit.
 
 ### Важное решение
 

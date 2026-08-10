@@ -317,6 +317,13 @@ class ExperimentScaffoldTests(unittest.TestCase):
             self.assertIn("candidate_settings = reference_settings", source)
             self.assertNotIn("baseline_settings: ModelingSettings", source)
             self.assertIn(
+                "Подготовить candidate поверх настроек baseline/чемпиона.",
+                source,
+            )
+            self.assertIn("CHANGE ME —", source)
+            self.assertNotIn("РџРѕРґРіРѕС‚РѕРІРёС‚СЊ", source)
+            self.assertNotIn("вЂ", source)
+            self.assertIn(
                 module_name,
                 selector.read_text(encoding="utf-8"),
             )

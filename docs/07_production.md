@@ -16,6 +16,11 @@ tags:
 > [!abstract] Результат этапа
 > Модель воспроизводимо поставляется, имеет контракт входа и выхода, контролируемый rollout, мониторинг, владельцев, rollback и правила retraining.
 
+> [!tip] Kaggle inference
+> Конкурсные full-train fit, проверенные CSV и внешние scores ведутся отдельно в
+> [[submissions/_index.md]] через [[notebooks/07_submission.ipynb]]. Submission
+> не назначает production champion автоматически.
+
 ## Production scope
 
 - **Режим:** batch / online / streaming / embedded.

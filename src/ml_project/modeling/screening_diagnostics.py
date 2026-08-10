@@ -8,6 +8,92 @@ import numpy as np
 import pandas as pd
 
 
+LOSS_CURVE_COLUMNS = [
+    "model",
+    "fold",
+    "iteration",
+    "split",
+    "log_loss",
+]
+
+
+def build_staged_log_loss_diagnostics(
+    evaluation: Any,
+    data: Any,
+) -> pd.DataFrame:
+    """Рассчитать train/validation log loss по boosting-итерациям и CV-folds."""
+
+    try:
+        from sklearn.metrics import log_loss
+    except ImportError:  # pragma: no cover - project dependency
+        return pd.DataFrame(columns=LOSS_CURVE_COLUMNS)
+
+    rows: list[dict[str, Any]] = []
+    for model_name, raw in evaluation.raw_results.items():
+        estimators = raw.get("estimator")
+        if estimators is None:
+            continue
+        for fold, ((train_indices, validation_indices), pipeline) in enumerate(
+            zip(evaluation.cv_splits, estimators),
+            start=1,
+        ):
+            final_model = getattr(pipeline, "named_steps", {}).get("model")
+            staged_predict_proba = getattr(
+                final_model,
+                "staged_predict_proba",
+                None,
+            )
+            if final_model is None or not callable(staged_predict_proba):
+                continue
+            transformer = pipeline[:-1]
+            X_train = transformer.transform(data.X.iloc[train_indices])
+            X_validation = transformer.transform(
+                data.X.iloc[validation_indices]
+            )
+            y_train = data.y.iloc[train_indices]
+            y_validation = data.y.iloc[validation_indices]
+            classes = getattr(final_model, "classes_", None)
+            train_stages = final_model.staged_predict_proba(X_train)
+            validation_stages = final_model.staged_predict_proba(X_validation)
+            for iteration, (train_proba, validation_proba) in enumerate(
+                zip(train_stages, validation_stages),
+                start=1,
+            ):
+                rows.extend(
+                    [
+                        {
+                            "model": model_name,
+                            "fold": fold,
+                            "iteration": iteration,
+                            "split": "train",
+                            "log_loss": float(
+                                log_loss(
+                                    y_train,
+                                    np.asarray(train_proba),
+                                    labels=classes,
+                                )
+                            ),
+                        },
+                        {
+                            "model": model_name,
+                            "fold": fold,
+                            "iteration": iteration,
+                            "split": "validation",
+                            "log_loss": float(
+                                log_loss(
+                                    y_validation,
+                                    np.asarray(validation_proba),
+                                    labels=classes,
+                                )
+                            ),
+                        },
+                    ]
+                )
+    if not rows:
+        return pd.DataFrame(columns=LOSS_CURVE_COLUMNS)
+    return pd.DataFrame(rows, columns=LOSS_CURVE_COLUMNS)
+
+
 def build_oof_diagnostics(
     evaluation: Any,
     data: Any,
@@ -169,4 +255,5 @@ def build_screening_feature_importance(evaluation: Any, plan: Any) -> pd.DataFra
 __all__ = [
     "build_oof_diagnostics",
     "build_screening_feature_importance",
+    "build_staged_log_loss_diagnostics",
 ]

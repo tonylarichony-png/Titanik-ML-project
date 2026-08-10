@@ -56,7 +56,23 @@ class MarkdownDocument:
         temporary = self.path.with_suffix(self.path.suffix + ".tmp")
         with temporary.open("w", encoding="utf-8", newline="") as stream:
             stream.write(text)
-        os.replace(temporary, self.path)
+        try:
+            os.replace(temporary, self.path)
+        except PermissionError:
+            # Obsidian and some Windows editors keep Markdown files open without
+            # FILE_SHARE_DELETE. In that state the file is writable, but an
+            # atomic replacement is rejected with WinError 5. Fall back to an
+            # in-place write; if it also fails, keep the complete temporary file
+            # beside the report so the generated content is not lost.
+            try:
+                with self.path.open("w", encoding="utf-8", newline="") as stream:
+                    stream.write(text)
+            except OSError as fallback_error:
+                raise PermissionError(
+                    f"Cannot update {self.path}. Close it in external editors "
+                    f"and retry; generated content remains in {temporary}."
+                ) from fallback_error
+            temporary.unlink(missing_ok=True)
         return updated
 
 

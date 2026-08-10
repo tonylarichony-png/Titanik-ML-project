@@ -111,7 +111,7 @@ def resolve_experiment_lineage(
         if module_name in seen:
             chain = " -> ".join([*path, module_name])
             raise ValueError(f"Experiment lineage contains a cycle: {chain}")
-        parent = load_experiment(module_name)
+        parent = load_experiment(module_name, reload_module=False)
         validate_settings(parent.settings)
         if require_adopted and parent.settings.decision != "adopt":
             raise ValueError(
@@ -277,7 +277,7 @@ def prepare_reference_experiment_data(
             settings=initial_settings,
             diagnostics={},
         )
-    parent = load_experiment(parent_experiment_module)
+    parent = load_experiment(parent_experiment_module, reload_module=False)
     validate_settings(parent.settings)
     if parent.settings.decision != "adopt":
         raise ValueError(
@@ -335,7 +335,7 @@ def build_reference_pipeline(
             preprocessor,
             modeling_tools.build_simple_estimator(settings),
         )
-    parent = load_experiment(parent_experiment_module)
+    parent = load_experiment(parent_experiment_module, reload_module=False)
     validate_settings(parent.settings)
     if parent.settings.decision != "adopt":
         raise ValueError(

@@ -26,7 +26,8 @@ tags:
 8. Настройте `src/ml_project/baseline_config.py` и запустите [[notebooks/03_baseline.ipynb|первый воспроизводимый baseline]].
 9. Для каждой контролируемой проверки используйте [[#Как начать новый эксперимент|короткую инструкцию создания эксперимента]].
 10. Когда feature set стабилизирован, переходите к [[#Как начать групповой screening моделей|групповому screening моделей]].
-11. Для нестандартных исследований и решений используйте встроенную команду Obsidian **Templates: Insert template**.
+11. Для проверки выбранного кандидата на Kaggle используйте [[#Как сделать Kaggle submission|универсальный submission notebook]].
+12. Для нестандартных исследований и решений используйте встроенную команду Obsidian **Templates: Insert template**.
 
 Полная инструкция: [[GUIDE.md|Как пользоваться шаблоном]].
 
@@ -106,6 +107,24 @@ tags:
 сначала сравниваются семейства на лучшем feature set, затем для shortlist
 делаются точечные ablation/retest действительно спорных признаков.
 
+## Как сделать Kaggle submission
+
+> [!tip] Один notebook для любого измеренного кандидата
+> 1. Откройте [[notebooks/07_submission.ipynb]] и выполните каталог кандидатов.
+> 2. В ячейке выбора задайте новый `SUBMISSION_ID` и один устойчивый
+>    `SELECTED_CANDIDATE`, например `MS-001/feature_champion` или
+>    `MS-001/random_forest`.
+> 3. Проверьте source, feature set, estimator, CV и inference audit до fit.
+> 4. Выполните full-train fit, проверьте строки, ключ и распределение prediction.
+> 5. Только затем выполните финальную ячейку сохранения и загрузите напечатанный
+>    CSV в Kaggle.
+> 6. В созданной SUB-карточке вручную запишите Public score и наблюдение.
+
+Notebook не позволяет свободно соединять признаки одного EXP с estimator другого
+MS-run: Candidate ID всегда обозначает уже измеренный целый pipeline. EXP со
+статусом reject остаются доступными, но контекстно-зависимый raw feature hook
+будет остановлен train-serving audit.
+
 ## Pipeline
 
 - [x] 0. [[docs/00_problem.md|Problem — постановка задачи]]
@@ -125,6 +144,7 @@ tags:
 - [[hypotheses/_index.md|Гипотезы]]
 - [[experiments/_index.md|Эксперименты]]
 - [[model-screening/_index.md|Screening моделей]]
+- [[submissions/_index.md|Kaggle submissions]]
 - [[decisions/_index.md|Решения]]
 - [[issues/_index.md|Проблемы и блокеры]]
 - [[assets/_index.md|Артефакты и графики]]
@@ -148,6 +168,7 @@ tags:
 | [[experiments/EXP-010 Pclassxsex.md\|EXP-010 — Объединение признака pcclass и Sex  в один]]                                                    | accuracy |   0.8148 |      -0.0056 | reject    |
 | [[experiments/EXP-011 Sexplcass V2.md\|EXP-011 — SexPlcass_V2]]                                                                                | accuracy |   0.8148 |      -0.0056 | reject    |
 | [[experiments/EXP-012 Exp 005 Ticketgroupsize.md\|EXP-012 — EXP-005+ticketGroupSize]]                                                          | accuracy |   0.8137 |      -0.0067 | reject    |
+| [[experiments/EXP-013 Tt Comb.md\|EXP-013 — Train_test_combine]]                                                                               | accuracy |   0.8126 |      -0.0079 | adopt     |
 
 <!-- auto:key-results:end -->
 
