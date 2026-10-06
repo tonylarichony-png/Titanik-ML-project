@@ -92,7 +92,7 @@ notebook здесь одновременно является исполняем
 
 > [!tip] Новый контролируемый эксперимент
 > 1. Активируйте окружение: `conda activate titanik-ml`.
-> 2. Из корня проекта запустите `.\new-experiment.cmd`: launcher создаст модуль и локальный workbench.
+> 2. Из корня проекта запустите `.\new-experiment.cmd`: launcher создаст модуль и workbench, который сохраняется в Git как история разработки эксперимента.
 > 3. Разработайте и проверьте идею в напечатанном `notebooks/workbench/EXP-xxx_*.ipynb`.
 > 4. Перенесите проверенную реализацию в созданный модуль `src/ml_project/experiments/exp_xxx_*.py`.
 > 5. Перезапустите kernel и выполните строгий [[notebooks/04_experiment.ipynb]] сверху вниз.

@@ -133,12 +133,12 @@ Project Dashboard ([[README.md]])
 | `experiments/exp_xxx_*.py` | Неизменяемая pre-registration, явный `parent_experiment_module`, критерии успеха и ровно одно кандидатное изменение |
 | `experiment_config.py` | Одна строка-селектор активного модуля; экспериментальная логика здесь не хранится |
 | `experiment.py` | Загрузка контракта, одинаковая оценка, provenance, артефакты и синхронизация отчётов |
-| `experiment_scaffold.py` | Создание следующего модуля и локального workbench |
+| `experiment_scaffold.py` | Создание следующего модуля и связанного workbench |
 | `experiment_workbench.py` | Генерация безопасной notebook-first лаборатории без записи официальных результатов |
 | `mlp_experiment.py` | Fold-safe preprocessing, nested early stopping, OOF и артефакты PyTorch MLP |
 | `mlp_experiment_scaffold.py` | Создание versioned MLP-модуля и связанного notebook |
 | `notebooks/mlp-experiments/` | Воспроизводимые runner-notebooks для `MLP-xxx` |
-| `notebooks/workbench/` | Игнорируемые Git черновики для разработки функции, smoke-fit и dry-run CV |
+| `notebooks/workbench/` | История разработки EXP-гипотез: функции, smoke-fit и dry-run CV |
 | `model_screening_config.py` | Один читаемый конфиг групп, starter-параметров и frozen feature reference |
 | `model_screening.py` | Тонкий стабильный фасад screening API для notebook |
 
@@ -151,7 +151,7 @@ Project Dashboard ([[README.md]])
 - В `02_eda_hypotheses` сохранение выполняется только при явном `SAVE_FINDING = True`: карточка может содержать график, одну или несколько Markdown-таблиц либо оба типа артефактов. Большие таблицы полностью сохраняются как CSV в `assets/eda/`, а ссылка на карточку автоматически появляется в [[docs/02_eda.md#Сохранённые EDA-наблюдения]]. Идеи для модельной проверки переносите в [[hypotheses/_index.md]].
 - [[notebooks/03_baseline.ipynb]] напрямую использует готовый объект `baseline_config.BASELINE`: скрытой сборки настроек через `modeling_tools` нет. Metric берётся из [[docs/00_problem.md]], а data contract — из `config.py`. При `BASELINE.sync_docs=True` notebook обновляет исполняемый validation contract, secondary metrics, baseline и воспроизводимость в [[docs/03_validation.md]], model-ready состав и preprocessing в [[docs/04_features.md]], current/best measured result в [[docs/05_experiments.md]], реестр карточек и ключевые результаты в [[README.md]]. CSV, metadata и final model сохраняются только отдельными явными полями `BASELINE`.
 - [[notebooks/04_experiment.ipynb]] читает из `experiment_config.py` только имя активного модуля, а из самого модуля — типизированный объект `EXPERIMENT` и две функции: подготовку кандидатных данных и сборку моделей. `parent_experiment_module` явно связывает эксперимент с последним принятым champion; notebook не копируется между EXP-002, EXP-003 и следующими запусками.
-- Локальный `notebooks/workbench/EXP-xxx_*.ipynb` используется до строгого runner: он загружает raw train без импорта незавершённого experiment-модуля, восстанавливает принятую родительскую pipeline, позволяет написать draft-функцию, проверяет contract, feature groups, smoke-fit reference/candidate и необязательный короткий CV. Fold-safe imputation остаётся внутри pipeline, поэтому пропуски могут быть видны в DataFrame до `fit`. Workbench ничего не синхронизирует.
+- `notebooks/workbench/EXP-xxx_*.ipynb` используется до строгого runner и сохраняется в Git как история разработки гипотезы: он загружает raw train без импорта незавершённого experiment-модуля, восстанавливает принятую родительскую pipeline, позволяет написать draft-функцию, проверяет contract, feature groups, smoke-fit reference/candidate и необязательный короткий CV. Fold-safe imputation остаётся внутри pipeline, поэтому пропуски могут быть видны в DataFrame до `fit`. Workbench ничего не синхронизирует.
 - [[notebooks/04_experiment.ipynb]] автоматически применяет data-hooks всех принятых предков, пересчитывает champion reference и candidate на одинаковых folds и не использует старый CSV как модель. Metadata и карточка фиксируют цепочку модулей с SHA-256. Гипотеза, критерии и guardrails хранятся в модуле; изменяемое после интерпретации решение хранится во frontmatter карточки. Графики, таблицы, registry, leaderboard и ключевые результаты формируются автоматически.
 - Тот же запуск сохраняет диагностику одного primary candidate: fitted-модели и validation-индексы тех же folds, transformed lineage, paired Δ, permutation/native importance и OOF-переходы ошибок. [[notebooks/05_diagnostics.ipynb]] только читает эти артефакты и ничего не переобучает.
 - [[notebooks/06_model_screening.ipynb]] восстанавливает принятый feature champion из versioned experiment-модуля, оставляет validation contract неизменным и запускает только выбранную группу. Параметры заранее видны в `model_screening_config.py`; fitted folds сразу дают ranking, paired wins/losses, OOF-сравнение и importance. Финальная ячейка пишет локальные таблицы в `artifacts/model-screening/`, Git-tracked PNG в `assets/model-screening/<MS-ID>/`, отдельную карточку и [[model-screening/_index.md|реестр]].
@@ -302,7 +302,7 @@ issues/ISSUE-001 Короткое название.md
 4. В модуле заполнить `EXPERIMENT`: гипотезу, единственное изменение, ожидаемый эффект, `primary_improvement_min` и при необходимости `metric_guardrails`; затем включить `RUN_MODULE_SMOKE` в workbench.
 5. Только после успешного module smoke перезапустить kernel и выполнить строгий [[notebooks/04_experiment.ipynb]] сверху вниз. Он создаст карточку, графики, таблицы, metadata и обновит сводные документы.
 6. Интерпретировать результат и изменить только поле `decision:` во frontmatter Markdown-карточки на `adopt`, `reject`, `iterate` или `inconclusive`; затем запустить `.\sync-experiment-state.cmd`. Только `adopt` делает модуль возможным родителем следующего experiment.
-7. Следующий launcher автоматически выберет последний adopted-модуль и запишет его точное имя в новый контракт. Versioned Python-модуль после запуска не переписывать; workbench можно оставить локально или удалить после переноса кода.
+7. Следующий launcher автоматически выберет последний adopted-модуль и запишет его точное имя в новый контракт. Versioned Python-модуль после запуска не переписывать; содержательный workbench сохранить в Git вместе с историей эксперимента.
 
 В коде эксперимента используются три явные роли настроек:
 
