@@ -16,3 +16,7 @@ dependencies:
   - xgboost
   - lightgbm
   - catboost
+  - optuna
+  - pip
+  - pip:
+      - torch

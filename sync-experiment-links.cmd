@@ -37,6 +37,15 @@ if not defined PYTHON_EXE (
     exit /b 1
 )
 
+rem Sync is a lightweight Markdown/CSV operation. Imported scientific libraries
+rem must not allocate one large BLAS workspace per logical CPU.
+set "OPENBLAS_NUM_THREADS=1"
+set "OMP_NUM_THREADS=1"
+set "OMP_THREAD_LIMIT=1"
+set "MKL_NUM_THREADS=1"
+set "NUMEXPR_NUM_THREADS=1"
+set "BLIS_NUM_THREADS=1"
+
 "%PYTHON_EXE%" %PYTHON_LAUNCH_ARGS% -c "from ml_project.experiment_state import main; raise SystemExit(main())" --project-root "%PROJECT_ROOT%"
 set "EXIT_CODE=%ERRORLEVEL%"
 

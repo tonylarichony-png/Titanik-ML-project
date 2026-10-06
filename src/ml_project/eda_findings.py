@@ -31,11 +31,13 @@ class EdaFinding:
 
     @property
     def note_wikilink(self) -> str:
+        """Вернуть Obsidian-ссылку на карточку наблюдения."""
         relative = self.note_path.as_posix()
         return f"[[{relative}|{self.finding_id} — {self.title}]]"
 
     @property
     def figure_embed(self) -> str:
+        """Вернуть Obsidian-вставку изображения наблюдения."""
         if self.figure_path is None:
             return ""
         return f"![[{self.figure_path.as_posix()}]]"

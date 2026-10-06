@@ -131,17 +131,17 @@ coarse tuning; новый champion на этапе screening автоматич�
 
 <!-- auto:latest-model-screening:start -->
 
-| Поле                 | Значение                                                                                                                                     |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Screening            | [[model-screening/MS-004 sklearn_boosting.md\|MS-004]] — sklearn_boosting with early stopping and validation on EXP-013 TT-combined features |
-| Feature set          | EXP-013                                                                                                                                      |
-| Группа               | sklearn_boosting                                                                                                                             |
-| Проверено кандидатов | 2                                                                                                                                            |
-| Метрика              | accuracy                                                                                                                                     |
-| Reference            | feature_champion: 0.8126                                                                                                                     |
-| Лидер                | hist_gradient_boosting: 0.8350 ± 0.0213                                                                                                      |
-| Δ к reference        | +0.0224                                                                                                                                      |
-| Shortlist            | hist_gradient_boosting, gradient_boosting                                                                                                    |
+| Поле                 | Значение                                                                                            |
+| -------------------- | --------------------------------------------------------------------------------------------------- |
+| Screening            | [[model-screening/MS-006 catboost.md\|MS-006]] — native_categorical on EXP-013 TT-combined features |
+| Feature set          | EXP-013                                                                                             |
+| Группа               | native_categorical                                                                                  |
+| Проверено кандидатов | 1                                                                                                   |
+| Метрика              | accuracy                                                                                            |
+| Reference            | feature_champion: 0.8126                                                                            |
+| Лидер                | catboost: 0.8372 ± 0.0140                                                                           |
+| Δ к reference        | +0.0247                                                                                             |
+| Shortlist            | catboost                                                                                            |
 
 <!-- auto:latest-model-screening:end -->
 
@@ -149,12 +149,14 @@ coarse tuning; новый champion на этапе screening автоматич�
 
 <!-- auto:model-screening-summary:start -->
 
-| Screening                                              | Feature set | Группа           | Лидер                  | Метрика  | Reference | Лучший | Δ       | Shortlist                                 |
-| ------------------------------------------------------ | ----------- | ---------------- | ---------------------- | -------- | --------: | -----: | ------- | ----------------------------------------- |
-| [[model-screening/MS-001 Tree Bagging.md\|MS-001]]     | EXP-003     | tree_bagging     | random_forest          | accuracy |    0.8204 | 0.8227 | +0.0022 | random_forest, extra_trees                |
-| [[model-screening/MS-002 Tree Bagging.md\|MS-002]]     | EXP-013     | tree_bagging     | random_forest          | accuracy |    0.8126 | 0.8182 | +0.0056 | random_forest, decision_tree              |
-| [[model-screening/MS-003 sklearn_boosting.md\|MS-003]] | EXP-013     | sklearn_boosting | gradient_boosting      | accuracy |    0.8126 | 0.8372 | +0.0247 | gradient_boosting, hist_gradient_boosting |
-| [[model-screening/MS-004 sklearn_boosting.md\|MS-004]] | EXP-013     | sklearn_boosting | hist_gradient_boosting | accuracy |    0.8126 | 0.8350 | +0.0224 | hist_gradient_boosting, gradient_boosting |
+| Screening                                              | Feature set | Группа             | Лидер                  | Метрика  | Reference | Лучший | Δ       | Shortlist                                 |
+| ------------------------------------------------------ | ----------- | ------------------ | ---------------------- | -------- | --------: | -----: | ------- | ----------------------------------------- |
+| [[model-screening/MS-001 Tree Bagging.md\|MS-001]]     | EXP-003     | tree_bagging       | random_forest          | accuracy |    0.8204 | 0.8227 | +0.0022 | random_forest, extra_trees                |
+| [[model-screening/MS-002 Tree Bagging.md\|MS-002]]     | EXP-013     | tree_bagging       | random_forest          | accuracy |    0.8126 | 0.8182 | +0.0056 | random_forest, decision_tree              |
+| [[model-screening/MS-003 sklearn_boosting.md\|MS-003]] | EXP-013     | sklearn_boosting   | gradient_boosting      | accuracy |    0.8126 | 0.8372 | +0.0247 | gradient_boosting, hist_gradient_boosting |
+| [[model-screening/MS-004 sklearn_boosting.md\|MS-004]] | EXP-013     | sklearn_boosting   | hist_gradient_boosting | accuracy |    0.8126 | 0.8350 | +0.0224 | hist_gradient_boosting, gradient_boosting |
+| [[model-screening/MS-005 ext_boost.md\|MS-005]]        | EXP-013     | external_boosting  | xgboost                | accuracy |    0.8126 | 0.8417 | +0.0292 | xgboost, lightgbm                         |
+| [[model-screening/MS-006 catboost.md\|MS-006]]         | EXP-013     | native_categorical | catboost               | accuracy |    0.8126 | 0.8372 | +0.0247 | catboost                                  |
 
 <!-- auto:model-screening-summary:end -->
 

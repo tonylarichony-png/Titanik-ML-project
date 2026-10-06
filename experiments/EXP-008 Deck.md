@@ -28,7 +28,7 @@ eda_findings: []
 | Одно изменение      | взять признак Cabin, выделить первую букву и создать новый признак Deck, относительно EXP004 больше ничего не менять                                                            |
 | Критерий успеха     | Primary improvement >= +0.0050; add explicit metric guardrails below.                                                                                                           |
 | Формальные критерии | failed                                                                                                                                                                          |
-| Решение | reject |
+| Решение             | reject                                                                                                                                                                          |
 | Run                 | exp_008_v1                                                                                                                                                                      |
 | Версия данных       | 7d118fef8b6c…                                                                                                                                                                   |
 | Validation          | stratified_kfold(n_splits=5, shuffle=True, seed=42)                                                                                                                             |

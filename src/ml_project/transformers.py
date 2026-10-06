@@ -52,6 +52,7 @@ class AgeByTitlePclassImputer(BaseEstimator, TransformerMixin):
 
     @property
     def required_columns(self) -> tuple[str, str, str]:
+        """Вернуть столбцы, необходимые трансформеру."""
         return self.age_column, self.title_column, self.class_column
 
     def _validate_frame(self, X: Any) -> pd.DataFrame:
@@ -66,6 +67,7 @@ class AgeByTitlePclassImputer(BaseEstimator, TransformerMixin):
         return X
 
     def fit(self, X: pd.DataFrame, y: Any = None) -> "AgeByTitlePclassImputer":
+        """Обучить объект на переданных данных и вернуть self."""
         frame = self._validate_frame(X)
         known_age = frame.loc[
             frame[self.age_column].notna(), list(self.required_columns)
@@ -85,6 +87,7 @@ class AgeByTitlePclassImputer(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Преобразовать данные с помощью обученных статистик."""
         check_is_fitted(
             self,
             [

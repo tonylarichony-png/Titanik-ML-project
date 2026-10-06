@@ -204,7 +204,8 @@ class ExperimentScaffoldTests(unittest.TestCase):
                 '    experiment_id="EXP-002",\n'
                 '    experiment_title="Parent",\n'
                 ")\n",
-                encoding="utf-8",
+                # Windows editors may save experiment modules with UTF-8 BOM.
+                encoding="utf-8-sig",
             )
             cards = root / "experiments"
             cards.mkdir()

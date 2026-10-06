@@ -33,10 +33,12 @@ class DataCatalog:
         self._frames: dict[str, pd.DataFrame] = {}
 
     def path(self, name: str) -> Path:
+        """Вернуть полный путь к файлу указанного набора данных."""
         spec = self.dataset_specs[name]
         return self.raw_dir / str(spec["filename"])
 
     def validate(self) -> None:
+        """Проверить наличие всех обязательных файлов данных."""
         missing = [
             self.path(name)
             for name, spec in self.dataset_specs.items()
@@ -47,6 +49,7 @@ class DataCatalog:
             raise FileNotFoundError(f"Required dataset files are missing:\n{formatted}")
 
     def available_names(self) -> list[str]:
+        """Вернуть имена наборов данных, файлы которых доступны."""
         return [
             name
             for name in self.dataset_specs
@@ -54,6 +57,7 @@ class DataCatalog:
         ]
 
     def load(self, name: str) -> pd.DataFrame:
+        """Загрузить указанный набор данных с кешированием результата."""
         if name not in self.dataset_specs:
             raise KeyError(f"Unknown dataset {name!r}.")
         if name not in self._frames:
@@ -64,6 +68,7 @@ class DataCatalog:
         return self._frames[name]
 
     def load_all(self) -> dict[str, pd.DataFrame]:
+        """Загрузить все доступные наборы данных проекта."""
         self.validate()
         return {
             name: self.load(name)
@@ -71,6 +76,7 @@ class DataCatalog:
         }
 
     def file_report(self) -> pd.DataFrame:
+        """Сформировать отчёт о размерах, памяти и версиях файлов."""
         rows: list[dict[str, object]] = []
         for name in self.available_names():
             path = self.path(name)
@@ -97,6 +103,7 @@ class DataCatalog:
         inference_dataset: str | None,
         field_descriptions: Mapping[str, str] | None = None,
     ) -> pd.DataFrame:
+        """Сформировать отчёт о схеме и назначении столбцов."""
         field_descriptions = field_descriptions or {}
         inference_columns = (
             set(self.load(inference_dataset).columns)

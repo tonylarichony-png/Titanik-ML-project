@@ -26,6 +26,15 @@ except ImportError:  # pragma: no cover - local dependency state
 else:
     DEPENDENCIES_AVAILABLE = True
 
+try:
+    import catboost  # noqa: F401
+    import lightgbm  # noqa: F401
+    import xgboost  # noqa: F401
+except ImportError:  # pragma: no cover - optional local dependencies
+    EXTERNAL_BOOSTING_AVAILABLE = False
+else:
+    EXTERNAL_BOOSTING_AVAILABLE = True
+
 
 FEATURE_GROUPS = {
     "numeric": ["numeric"],
@@ -143,6 +152,66 @@ def boosting_screening_for_test():
     )
 
 
+def external_boosting_screening_for_test(*, native: bool):
+    if native:
+        group = ModelGroupSettings(
+            group_id="native_boosting_test",
+            title="Native boosting",
+            preprocessing_profile="native_categorical",
+            models=(
+                ScreeningModelSpec(
+                    "catboost",
+                    "CatBoost",
+                    {
+                        "iterations": 6,
+                        "learning_rate": 0.1,
+                        "depth": 2,
+                    },
+                ),
+            ),
+        )
+        diagnostic_model = "catboost"
+    else:
+        group = ModelGroupSettings(
+            group_id="external_boosting_test",
+            title="External boosting",
+            preprocessing_profile="unscaled_sparse",
+            models=(
+                ScreeningModelSpec(
+                    "xgboost",
+                    "XGBoost",
+                    {
+                        "n_estimators": 6,
+                        "learning_rate": 0.1,
+                        "max_depth": 2,
+                    },
+                ),
+                ScreeningModelSpec(
+                    "lightgbm",
+                    "LightGBM",
+                    {
+                        "n_estimators": 6,
+                        "learning_rate": 0.1,
+                        "num_leaves": 4,
+                        "min_child_samples": 2,
+                    },
+                ),
+            ),
+        )
+        diagnostic_model = "xgboost"
+    return replace(
+        screening_for_test(),
+        screening_id="MS-NATIVE" if native else "MS-EXTERNAL",
+        screening_title=group.title,
+        screening_note=Path(f"model-screening/{group.group_id}.md"),
+        active_group=group.group_id,
+        groups={group.group_id: group},
+        diagnostic_model_id=diagnostic_model,
+        shortlist_size=len(group.models),
+        run_name=f"{group.group_id}_v1",
+    )
+
+
 class ModelScreeningNotebookTests(unittest.TestCase):
     def test_notebook_has_valid_code_cells(self) -> None:
         path = Path(__file__).resolve().parents[1] / "notebooks/06_model_screening.ipynb"
@@ -197,6 +266,54 @@ class ModelScreeningTests(unittest.TestCase):
             )
             note = saved.note_path.read_text(encoding="utf-8")
             self.assertEqual(note.count("boosting-log-loss.png"), 1)
+
+    @unittest.skipUnless(
+        EXTERNAL_BOOSTING_AVAILABLE,
+        "external boosting diagnostics require xgboost, lightgbm and catboost",
+    )
+    def test_external_boosters_add_loss_curves(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "docs").mkdir()
+            (root / "docs/00_problem.md").write_text(
+                "(primary_metric:: accuracy)\n",
+                encoding="utf-8",
+            )
+            for native, expected_models in (
+                (False, {"xgboost", "lightgbm"}),
+                (True, {"catboost"}),
+            ):
+                screening = external_boosting_screening_for_test(native=native)
+                context = screening_tools.prepare_screening_context(
+                    root,
+                    sample_frame(),
+                    FEATURE_GROUPS,
+                    target="target",
+                    key="id",
+                    initial_settings=settings_for_test(),
+                    feature_reference_module=None,
+                )
+                built = screening_tools.build_model_group(context, screening)
+                result = screening_tools.run_model_screening(
+                    root,
+                    built,
+                    screening,
+                )
+                figures = screening_tools.build_screening_figures(
+                    result,
+                    screening,
+                )
+
+                self.assertIn("boosting-log-loss.png", figures)
+                loss_figure = figures["boosting-log-loss.png"]
+                self.assertEqual(len(loss_figure.axes), len(expected_models))
+                self.assertEqual(
+                    {axis.get_title() for axis in loss_figure.axes},
+                    expected_models,
+                )
+                import matplotlib.pyplot as plt
+
+                plt.close("all")
 
     def test_task_specific_params_support_regression_templates(self) -> None:
         regression = replace(settings_for_test(), task_type="regression")

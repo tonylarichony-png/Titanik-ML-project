@@ -146,7 +146,10 @@ def _experiment_literals(
     names: set[str],
 ) -> dict[str, object]:
     tree = ast.parse(
-        module_path.read_text(encoding="utf-8"),
+        # ``utf-8-sig`` also accepts ordinary UTF-8 while removing a BOM when
+        # an editor has added one.  Passing U+FEFF through to ``ast.parse``
+        # raises ``SyntaxError: invalid non-printable character``.
+        module_path.read_text(encoding="utf-8-sig"),
         filename=str(module_path),
     )
     experiment_call = None
@@ -488,6 +491,7 @@ def scaffold_experiment(
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Запустить команду модуля из командной строки."""
     parser = argparse.ArgumentParser(
         description="Create a versioned experiment module and select it."
     )

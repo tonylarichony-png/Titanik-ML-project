@@ -168,9 +168,11 @@ class FeaturePlan:
 
     @property
     def model_features(self) -> tuple[str, ...]:
+        """Вернуть все числовые и категориальные признаки модели."""
         return (*self.numeric, *self.categorical)
 
     def to_frame(self) -> pd.DataFrame:
+        """Представить контракт в виде таблицы pandas."""
         rows: list[dict[str, str]] = []
         selected = set(self.model_features)
         for feature, group in self.group_by_feature.items():
@@ -221,6 +223,7 @@ class ScoringPlan:
     negated: Mapping[str, bool]
 
     def to_frame(self) -> pd.DataFrame:
+        """Представить контракт в виде таблицы pandas."""
         return pd.DataFrame(
             [
                 {
@@ -244,6 +247,7 @@ class CVEvaluation:
     cv_splits: tuple[tuple[Any, Any], ...] = ()
 
     def primary_summary(self) -> pd.DataFrame:
+        """Вернуть агрегированные validation-метрики основной метрики."""
         return self.summary[
             (self.summary["metric_key"] == "primary")
             & (self.summary["split"] == "validation")

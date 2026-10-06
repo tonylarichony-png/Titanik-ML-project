@@ -22,6 +22,7 @@ class MarkdownDocument:
         self.path = Path(path)
 
     def update_blocks(self, blocks: Mapping[str, str]) -> list[str]:
+        """Обновить только отмеченные автогенерируемые блоки Markdown."""
         with self.path.open("r", encoding="utf-8", newline="") as stream:
             text = stream.read()
         newline = "\r\n" if "\r\n" in text else "\n"
@@ -217,6 +218,7 @@ def build_data_blocks(
     inference_dataset: str | None,
     field_descriptions: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
+    """Собрать Markdown-блоки паспорта данных проекта."""
     file_report = catalog.file_report()
     schema_report = catalog.schema_report(
         key=key,
@@ -295,6 +297,7 @@ def build_eda_blocks(
     *,
     train_dataset: str,
 ) -> dict[str, str]:
+    """Собрать Markdown-блоки с результатами разведочного анализа."""
     profile_names = set(profiles)
     snapshot = catalog.file_report()
     snapshot = snapshot[snapshot["dataset"].isin(profile_names)]

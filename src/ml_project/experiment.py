@@ -127,6 +127,7 @@ def resolve_experiment_lineage(
 
 
 def validate_settings(settings: ExperimentSettings) -> None:
+    """Проверить согласованность настроек эксперимента."""
     errors: list[str] = []
     name_pattern = r"[A-Za-z0-9][A-Za-z0-9._-]*"
     if not re.fullmatch(name_pattern, settings.experiment_id):
@@ -192,6 +193,7 @@ def validate_settings(settings: ExperimentSettings) -> None:
 
 
 def settings_report(settings: ExperimentSettings) -> pd.DataFrame:
+    """Представить настройки эксперимента в виде таблицы."""
     rows = [
         ("identity", "experiment_id", settings.experiment_id),
         ("identity", "experiment_title", settings.experiment_title),
@@ -426,6 +428,7 @@ def validate_model_contract(
     candidate_models: Mapping[str, Any],
     settings: ExperimentSettings,
 ) -> None:
+    """Проверить состав и интерфейс моделей эксперимента."""
     if not candidate_models:
         raise ValueError(
             "The candidate_models dictionary is empty. Fill the editable "
@@ -815,6 +818,7 @@ def build_experiment_report(
     diagnostics: ExperimentDiagnostics | None = None,
     saved_diagnostics: SavedDiagnostics | None = None,
 ) -> str:
+    """Собрать Markdown-отчёт по результатам эксперимента."""
     comparison = comparison_summary(
         evaluation, scoring, reference_model=settings.reference_model
     )
@@ -956,6 +960,7 @@ def sync_experiment_note(
     diagnostics: ExperimentDiagnostics | None = None,
     saved_diagnostics: SavedDiagnostics | None = None,
 ) -> list[str]:
+    """Обновить карточку эксперимента рассчитанными результатами."""
     root = Path(project_root).resolve()
     settings = settings_with_card_decision(root, settings)
     note_path = (root / settings.experiment_note).resolve()

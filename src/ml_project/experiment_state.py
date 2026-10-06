@@ -334,6 +334,7 @@ def sync_experiment_state(project_root: str | Path) -> dict[str, Any]:
 
 
 def main(argv: Iterable[str] | None = None) -> int:
+    """Запустить команду модуля из командной строки."""
     parser = argparse.ArgumentParser(
         description="Synchronize experiment-card decisions and EDA links."
     )

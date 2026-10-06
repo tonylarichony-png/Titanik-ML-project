@@ -64,6 +64,7 @@ class PreparedSubmissionCandidate:
 
     @property
     def inference_ready(self) -> bool:
+        """Проверить, прошёл ли кандидат аудит inference-признаков."""
         return self.inference_audit.empty
 
 

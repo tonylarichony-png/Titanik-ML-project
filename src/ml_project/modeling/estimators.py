@@ -52,6 +52,7 @@ def build_simple_estimator(settings: ModelingSettings) -> Any:
 
 
 def resolved_model_name(settings: ModelingSettings) -> str:
+    """Определить техническое имя модели из настроек задачи."""
     if settings.model_name != "auto":
         return settings.model_name
     return (
@@ -79,4 +80,5 @@ def build_model_pipeline(preprocessor: Any, estimator: Any) -> Any:
 
 
 def resolved_model_label(model_name: str) -> str:
+    """Вернуть человекочитаемое название выбранной модели."""
     return model_name.replace("_", " ")

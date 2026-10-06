@@ -77,6 +77,7 @@ class NativeCategoricalPreprocessor:
         self.categorical_fill_value = categorical_fill_value
 
     def get_params(self, deep: bool = True) -> dict[str, Any]:
+        """Вернуть параметры объекта в формате scikit-learn."""
         return {
             "numeric_features": self.numeric_features,
             "categorical_features": self.categorical_features,
@@ -87,6 +88,7 @@ class NativeCategoricalPreprocessor:
         }
 
     def set_params(self, **params: Any) -> "NativeCategoricalPreprocessor":
+        """Изменить параметры объекта в формате scikit-learn."""
         for name, value in params.items():
             if name not in self.get_params(deep=False):
                 raise ValueError(f"Unknown parameter {name!r}")
@@ -95,6 +97,7 @@ class NativeCategoricalPreprocessor:
 
     @property
     def feature_names(self) -> tuple[str, ...]:
+        """Вернуть упорядоченные имена выходных признаков."""
         return (*self.numeric_features, *self.categorical_features)
 
     def _validate_frame(self, X: Any) -> pd.DataFrame:
@@ -106,6 +109,7 @@ class NativeCategoricalPreprocessor:
         return X
 
     def fit(self, X: pd.DataFrame, y: Any = None) -> "NativeCategoricalPreprocessor":
+        """Обучить объект на переданных данных и вернуть self."""
         frame = self._validate_frame(X)
         numeric_fill: dict[str, Any] = {}
         for feature in self.numeric_features:
@@ -143,6 +147,7 @@ class NativeCategoricalPreprocessor:
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """Преобразовать данные с помощью обученных статистик."""
         if not hasattr(self, "numeric_fill_"):
             raise ValueError("NativeCategoricalPreprocessor is not fitted")
         frame = self._validate_frame(X)
@@ -171,6 +176,7 @@ class NativeCategoricalPreprocessor:
         return self.fit(X, y).transform(X)
 
     def get_feature_names_out(self, input_features: Any = None) -> np.ndarray:
+        """Вернуть имена признаков после преобразования."""
         return np.asarray(self.feature_names, dtype=object)
 
 
@@ -181,6 +187,7 @@ class CatBoostClassifierAdapter(ClassifierMixin, BaseEstimator):
         self.params = params
 
     def fit(self, X: Any, y: Any, **fit_params: Any) -> "CatBoostClassifierAdapter":
+        """Обучить объект на переданных данных и вернуть self."""
         from catboost import CatBoostClassifier
 
         self.model_ = CatBoostClassifier(**dict(self.params))
@@ -191,9 +198,11 @@ class CatBoostClassifierAdapter(ClassifierMixin, BaseEstimator):
         return self
 
     def predict(self, X: Any) -> np.ndarray:
+        """Рассчитать предсказания для переданных объектов."""
         return np.asarray(self.model_.predict(X)).reshape(-1)
 
     def predict_proba(self, X: Any) -> np.ndarray:
+        """Рассчитать вероятности классов для переданных объектов."""
         return np.asarray(self.model_.predict_proba(X))
 
 
@@ -204,6 +213,7 @@ class CatBoostRegressorAdapter(RegressorMixin, BaseEstimator):
         self.params = params
 
     def fit(self, X: Any, y: Any, **fit_params: Any) -> "CatBoostRegressorAdapter":
+        """Обучить объект на переданных данных и вернуть self."""
         from catboost import CatBoostRegressor
 
         self.model_ = CatBoostRegressor(**dict(self.params))
@@ -213,6 +223,7 @@ class CatBoostRegressorAdapter(RegressorMixin, BaseEstimator):
         return self
 
     def predict(self, X: Any) -> np.ndarray:
+        """Рассчитать предсказания для переданных объектов."""
         return np.asarray(self.model_.predict(X)).reshape(-1)
 
 

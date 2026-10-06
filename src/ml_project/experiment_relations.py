@@ -409,6 +409,7 @@ def sync_experiment_eda_relations(project_root: str | Path) -> dict[str, Any]:
 
 
 def main(argv: Iterable[str] | None = None) -> int:
+    """Запустить команду модуля из командной строки."""
     parser = argparse.ArgumentParser(
         description="Synchronize EDA links in experiment and finding cards."
     )

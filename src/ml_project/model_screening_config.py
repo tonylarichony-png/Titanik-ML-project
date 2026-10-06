@@ -144,24 +144,24 @@ MODEL_GROUPS = {
 
 SCREENING = ModelScreeningSettings(
     # Новый ID нужен для каждого официально сохранённого группового прогона.
-    screening_id="MS-004",
-    screening_title="sklearn_boosting with early stopping and validation on EXP-013 TT-combined features",
-    screening_note=Path("model-screening/MS-004 sklearn_boosting.md"),
+    screening_id="MS-006",
+    screening_title="native_categorical on EXP-013 TT-combined features",
+    screening_note=Path("model-screening/MS-006 catboost.md"),
 
     # Feature set фиксируется модулем принятого чемпиона; EXP-003 включает
     # также всю принятую parent-цепочку EXP-001 → EXP-002 → EXP-003.
     feature_reference_module="ml_project.experiments.exp_013_tt_comb",
 
     # Для следующей группы меняются active_group, ID, title, note и run_name.
-    active_group="sklearn_boosting",
+    active_group="native_categorical",
     groups=MODEL_GROUPS,
     reference_model_id="feature_champion",
 
     # Эта модель получает отдельный график агрегированной importance.
-    diagnostic_model_id="hist_gradient_boosting",
+    diagnostic_model_id="catboost",
     shortlist_size=2,
 
-    run_name="ms_004_sklearn_boosting_v1",
+    run_name="ms_006_native_categorical_v1",
     artifact_dir=Path("artifacts/model-screening"),
     results_registry=Path("model-screening/results.csv"),
     save_artifacts=True,

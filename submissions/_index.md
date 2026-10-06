@@ -12,14 +12,18 @@ entity: kaggle-submissions
 
 <!-- auto:submission-registry:start -->
 
-| Submission                          | Candidate                     | Feature set | Model                          | CV              | Rows | Public score |
-| ----------------------------------- | ----------------------------- | ----------- | ------------------------------ | --------------- | ---: | ------------ |
-| [[submissions/SUB-001.md\|SUB-001]] | MS-001/feature_champion       | EXP-003     | LogisticRegression             | 0.8204 ± 0.0176 |  418 | "0.76315"    |
-| [[submissions/SUB-002.md\|SUB-002]] | MS-001/random_forest          | EXP-003     | RandomForestClassifier         | 0.8227 ± 0.0123 |  418 | "0.78708"    |
-| [[submissions/SUB-003.md\|SUB-003]] | EXP-013/candidate             | EXP-013     | LogisticRegression             | 0.8126 ± 0.0152 |  418 | "0.78468"    |
-| [[submissions/SUB-004.md\|SUB-004]] | MS-002/random_forest          | EXP-013     | RandomForestClassifier         | 0.8182 ± 0.0197 |  418 | "0.77990"    |
-| [[submissions/SUB-005.md\|SUB-005]] | MS-003/hist_gradient_boosting | EXP-013     | HistGradientBoostingClassifier | 0.8339 ± 0.0165 |  418 | "0.75358"    |
-| [[submissions/SUB-006.md\|SUB-006]] | MS-003/gradient_boosting      | EXP-013     | GradientBoostingClassifier     | 0.8372 ± 0.0223 |  418 | "0.76315"    |
+| Submission                          | Candidate                     | Feature set       | Model                          | CV              | Rows | Public score |
+| ----------------------------------- | ----------------------------- | ----------------- | ------------------------------ | --------------- | ---: | ------------ |
+| [[submissions/SUB-001.md\|SUB-001]] | MS-001/feature_champion       | EXP-003           | LogisticRegression             | 0.8204 ± 0.0176 |  418 | "0.76315"    |
+| [[submissions/SUB-002.md\|SUB-002]] | MS-001/random_forest          | EXP-003           | RandomForestClassifier         | 0.8227 ± 0.0123 |  418 | "0.78708"    |
+| [[submissions/SUB-003.md\|SUB-003]] | EXP-013/candidate             | EXP-013           | LogisticRegression             | 0.8126 ± 0.0152 |  418 | "0.78468"    |
+| [[submissions/SUB-004.md\|SUB-004]] | MS-002/random_forest          | EXP-013           | RandomForestClassifier         | 0.8182 ± 0.0197 |  418 | "0.77990"    |
+| [[submissions/SUB-005.md\|SUB-005]] | MS-003/hist_gradient_boosting | EXP-013           | HistGradientBoostingClassifier | 0.8339 ± 0.0165 |  418 | "0.75358"    |
+| [[submissions/SUB-006.md\|SUB-006]] | MS-003/gradient_boosting      | EXP-013           | GradientBoostingClassifier     | 0.8372 ± 0.0223 |  418 | "0.76315"    |
+| [[submissions/SUB-007.md\|SUB-007]] | MS-005/lightgbm               | EXP-013           | LGBMClassifier                 | 0.8417 ± 0.0157 |  418 | "0.75358"    |
+| [[submissions/SUB-008.md\|SUB-008]] | MS-006/catboost               | EXP-013           | CatBoostClassifierAdapter      | 0.8372 ± 0.0140 |  418 | "0.75598"    |
+| [[submissions/SUB-009.md\|SUB-009]] | ENS-003/stacking              | EXP-013 + MLP-024 | NestedWeightedSoftVoting       | 0.8406 ± 0.0218 |  418 | "0.76076"    |
+| [[submissions/SUB-010.md\|SUB-010]] | MLP-024/candidate             | MLP-024           | TitanicMLP                     | 0.8384 ± 0.0111 |  418 | "0.76794"    |
 
 <!-- auto:submission-registry:end -->
 

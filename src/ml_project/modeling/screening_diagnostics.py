@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Any, Iterator, Sequence
 
 import numpy as np
 import pandas as pd
@@ -15,6 +15,54 @@ LOSS_CURVE_COLUMNS = [
     "split",
     "log_loss",
 ]
+
+
+def _boosting_rounds(model: Any, family: str) -> int:
+    if family == "xgboost":
+        booster = model.get_booster()
+        getter = getattr(booster, "num_boosted_rounds", None)
+        if callable(getter):
+            return int(getter())
+        return int(getattr(model, "n_estimators", 0))
+    if family == "lightgbm":
+        booster = getattr(model, "booster_", None)
+        getter = getattr(booster, "current_iteration", None)
+        if callable(getter):
+            return int(getter())
+        return int(
+            getattr(model, "n_estimators_", getattr(model, "n_estimators", 0))
+        )
+    return 0
+
+
+def _staged_probabilities(model: Any, X: Any) -> Iterator[np.ndarray]:
+    """Unify staged probabilities across sklearn and external boosters."""
+
+    staged = getattr(model, "staged_predict_proba", None)
+    if callable(staged):
+        for probabilities in staged(X):
+            yield np.asarray(probabilities)
+        return
+
+    wrapped_model = getattr(model, "model_", None)
+    wrapped_staged = getattr(wrapped_model, "staged_predict_proba", None)
+    if callable(wrapped_staged):
+        for probabilities in wrapped_staged(X):
+            yield np.asarray(probabilities)
+        return
+
+    family = type(model).__module__.split(".", maxsplit=1)[0]
+    rounds = _boosting_rounds(model, family)
+    if rounds < 1:
+        return
+    if family == "xgboost":
+        for iteration in range(1, rounds + 1):
+            yield np.asarray(
+                model.predict_proba(X, iteration_range=(0, iteration))
+            )
+    elif family == "lightgbm":
+        for iteration in range(1, rounds + 1):
+            yield np.asarray(model.predict_proba(X, num_iteration=iteration))
 
 
 def build_staged_log_loss_diagnostics(
@@ -38,14 +86,9 @@ def build_staged_log_loss_diagnostics(
             start=1,
         ):
             final_model = getattr(pipeline, "named_steps", {}).get("model")
-            staged_predict_proba = getattr(
-                final_model,
-                "staged_predict_proba",
-                None,
-            )
-            if final_model is None or not callable(staged_predict_proba):
+            if final_model is None:
                 continue
-            transformer = pipeline[:-1]
+            transformer = pipeline.named_steps["preprocess"]
             X_train = transformer.transform(data.X.iloc[train_indices])
             X_validation = transformer.transform(
                 data.X.iloc[validation_indices]
@@ -53,8 +96,11 @@ def build_staged_log_loss_diagnostics(
             y_train = data.y.iloc[train_indices]
             y_validation = data.y.iloc[validation_indices]
             classes = getattr(final_model, "classes_", None)
-            train_stages = final_model.staged_predict_proba(X_train)
-            validation_stages = final_model.staged_predict_proba(X_validation)
+            train_stages = _staged_probabilities(final_model, X_train)
+            validation_stages = _staged_probabilities(
+                final_model,
+                X_validation,
+            )
             for iteration, (train_proba, validation_proba) in enumerate(
                 zip(train_stages, validation_stages),
                 start=1,
@@ -101,6 +147,7 @@ def build_oof_diagnostics(
     reference_model: str,
     classification: bool,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Собрать диагностику ошибок по OOF-предсказаниям."""
     rows: list[dict[str, Any]] = []
     model_names = list(evaluation.raw_results)
     for model in model_names:
@@ -181,6 +228,7 @@ def _source_feature(name: str, raw_features: Sequence[str]) -> str:
 
 
 def build_screening_feature_importance(evaluation: Any, plan: Any) -> pd.DataFrame:
+    """Рассчитать важность исходных признаков screening-модели."""
     rows: list[dict[str, Any]] = []
     raw_features = list(plan.model_features)
     for model, raw in evaluation.raw_results.items():

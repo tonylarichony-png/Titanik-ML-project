@@ -6,6 +6,22 @@ tags:
 
 # Руководство по ML Project Template
 
+## Как открыть проект
+
+Исследовательская часть оформлена как Obsidian vault. Установите
+[Obsidian](https://obsidian.md/download), выберите **Open folder as vault** и
+укажите корневую папку проекта — ту, в которой находятся `README.md`, `docs/`,
+`experiments/`, `mlp-experiments/`, `model-screening/`, `ensembles/` и
+`submissions/`.
+
+Obsidian нужен для Wiki-ссылок `[[...]]`, графа связей, карточек экспериментов и
+быстрой навигации по истории решений. Python-код, CSV и notebooks работают без
+Obsidian; приложение требуется именно для полноценного просмотра исследования.
+
+Проект использует notebook-first workflow. Последовательность notebooks и
+versioned Python-модули являются воспроизводимым pipeline, поэтому единый
+`main.py` не считается обязательной точкой входа для этой учебной работы.
+
 ## 1. Что это за система
 
 Это не набор отчётов, а **ML Project OS** — связная система ведения ML-проекта в Obsidian. Она объединяет:
@@ -61,6 +77,7 @@ Project Dashboard ([[README.md]])
 | Контракт и реализация одного эксперимента | `src/ml_project/experiments/exp_xxx_*.py` |
 | Выбранный для запуска эксперимент | `src/ml_project/experiment_config.py` |
 | Создание следующего эксперимента | `.\new-experiment.cmd` |
+| Создание PyTorch MLP-эксперимента | `.\new-MLPexperiment.cmd` |
 | Контролируемое сравнение, графики и фиксация | [[notebooks/04_experiment.ipynb]] |
 | Разбор пути признака, importance и OOF-ошибок | [[notebooks/05_diagnostics.ipynb]] |
 | Групповой выбор семейства на лучшем feature set | [[notebooks/06_model_screening.ipynb]] |
@@ -118,6 +135,9 @@ Project Dashboard ([[README.md]])
 | `experiment.py` | Загрузка контракта, одинаковая оценка, provenance, артефакты и синхронизация отчётов |
 | `experiment_scaffold.py` | Создание следующего модуля и локального workbench |
 | `experiment_workbench.py` | Генерация безопасной notebook-first лаборатории без записи официальных результатов |
+| `mlp_experiment.py` | Fold-safe preprocessing, nested early stopping, OOF и артефакты PyTorch MLP |
+| `mlp_experiment_scaffold.py` | Создание versioned MLP-модуля и связанного notebook |
+| `notebooks/mlp-experiments/` | Воспроизводимые runner-notebooks для `MLP-xxx` |
 | `notebooks/workbench/` | Игнорируемые Git черновики для разработки функции, smoke-fit и dry-run CV |
 | `model_screening_config.py` | Один читаемый конфиг групп, starter-параметров и frozen feature reference |
 | `model_screening.py` | Тонкий стабильный фасад screening API для notebook |
@@ -299,6 +319,54 @@ parent, решение и provenance. Старое имя типа `BaselineSett
 заполнение пропусков, encoding или selection, их реализация должна быть частью
 candidate Pipeline, а не заранее преобразованного полного train.
 
+### Новый PyTorch MLP-эксперимент
+
+1. Из корня проекта выполнить `.\new-MLPexperiment.cmd`. Launcher назначит
+   следующий `MLP-xxx`, спросит название, скопирует реализацию последнего
+   принятого MLP в новый versioned Python-модуль и создаст отдельный
+   runner-notebook. В копию входят feature engineering, fold-transformer,
+   preprocessing, параметры обучения и архитектура сети. ID, название, путь
+   карточки и parent обновятся, а описание новой гипотезы будет очищено.
+2. В `prepare_features(frame)` создавать построчные признаки: арифметические
+   комбинации, флаги, извлечение Title из Name. Зарегистрировать каждый вход ровно
+   один раз в `numeric_features` или `categorical_features`.
+3. Для TicketGroupSize, частот, групповых средних и других обучаемых статистик
+   использовать `build_fold_transformer()`. Его `fit` получает только train fold;
+   validation и test обрабатываются через `transform` с сохранёнными mapping.
+4. В `MLPTrainingConfig` менять imputer, scaling, batch size, learning rate,
+   weight decay и early stopping. В `build_network(input_dim)` менять число и
+   ширину слоёв, активации и dropout; последний слой должен выдавать один логит.
+5. Перезапустить kernel и выполнить созданный `MLP-xxx_*.ipynb` сверху вниз.
+   Пять outer folds измеряют OOF-качество. Внутренний split каждого fold выбирает
+   эпоху, после чего preprocessing и сеть заново fit-ятся на всём outer-train.
+6. Записать вывод в notebook до финального fit. Артефакты сохраняются в папку,
+   содержащую SHA-256 версии модуля, поэтому изменение кода не перезаписывает
+   результат другой реализации. Следующую гипотезу оформлять новым `MLP-xxx`.
+7. Notebook создаёт Obsidian-карточку и paired-сравнение на тех же folds. После
+   анализа изменить `decision:` и выполнить `.\sync-MLPexperiment-state.cmd`.
+   Следующий launcher выберет последний принятый MLP как reference и основу кода
+   нового кандидата. Это отдельная физическая копия, поэтому изменение нового
+   эксперимента не затрагивает его parent. До первого MLP с решением `adopt`
+   используется чистый шаблон и текущий принятый sklearn-чемпион как reference.
+
+`prepare_features` вызывается независимо для train и inference и не должен менять
+target, key, index или порядок строк. Финальная ячейка с fit на полном train и
+созданием submission по умолчанию выключена; включайте её только после принятия
+результата CV.
+
+Когда ручные эксперименты сузили разумное пространство гиперпараметров, откройте
+`notebooks/mlp-tuning/01_optuna_mlp.ipynb`. Optuna подбирает параметры на общих
+фиксированных screening folds с `n_jobs=1` и сохраняет study в SQLite. Trial —
+кандидат внутри поиска, а не официальный эксперимент. Несколько лучших trials
+перепроверяются на пяти folds и разных seed; победитель оформляется отдельным
+`MLP-xxx` и только после paired-сравнения может получить `decision: adopt`.
+
+После завершения первого пространства откройте
+`notebooks/mlp-tuning/02_optuna_mlp_activations.ipynb`. Это отдельная study для
+сфокусированного поиска глубины, ширины и функции активации. Она содержит анализ
+активаций среди top trials и ячейку перепроверки трёх кандидатов на официальных
+пяти folds. Не добавляйте её trials в базу первого исследования.
+
 ### Групповой screening моделей
 
 Начинайте этот этап, когда основные EDA/feature-гипотезы проверены и дальнейшие
@@ -327,8 +395,8 @@ feature reference, группа или параметры, сохранение 
 
 `Shortlist` означает «стоит исследовать дальше», а не «новый champion». Среднее
 CV без параметров, std и paired-fold поведения недостаточно для окончательного
-выбора модели. PyTorch/DNN остаётся отдельной будущей веткой и в этот runner не
-включён.
+выбора модели. PyTorch/DNN ведётся отдельной веткой `MLP-xxx` и в sklearn
+screening runner не включён.
 
 ### Kaggle submission
 
